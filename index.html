@@ -10,50 +10,72 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
     <style>
-        .map-container { height: 300px; width: 100%; border-radius: 8px; margin-top: 10px; }
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        body { font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; }
+        .map-container { height: 300px; width: 100%; border-radius: 16px; margin-top: 10px; overflow: hidden; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #f97316; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .card-anim { animation: fadeInUp 0.4s ease both; }
+        .btn-friendly { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .btn-friendly:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+        .btn-friendly:active { transform: translateY(0) scale(0.98); }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans">
+<body class="bg-orange-50 text-gray-800 font-sans">
 
     <!-- Header & Login -->
-    <nav class="bg-blue-900 text-white p-4 shadow-md flex justify-between items-center">
-        <h1 class="text-xl font-bold">🚴 Società Ciclistica</h1>
-        <div id="auth-area" class="flex items-center gap-4"></div>
+    <nav class="bg-gradient-to-r from-orange-500 to-rose-500 text-white p-4 shadow-lg sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex justify-between items-center flex-wrap gap-2">
+            <div>
+                <h1 class="text-xl md:text-2xl font-extrabold">🚴 Pedale Allegro</h1>
+                <p class="text-xs md:text-sm text-orange-100">La community che pedala insieme! 🤝💨</p>
+            </div>
+            <div id="auth-area" class="flex items-center gap-3"></div>
+        </div>
     </nav>
 
     <main class="max-w-4xl mx-auto p-4">
+        <!-- Benvenuto -->
+        <div class="mt-4 mb-2 bg-white rounded-2xl shadow p-5 card-anim">
+            <h2 class="text-lg font-bold text-orange-600">Ciao, benvenuto/a! 👋</h2>
+            <p class="text-sm text-gray-600 mt-1">Qui trovi tutte le uscite settimanali e le gare in programma. Scegli una scheda qui sotto e... buona pedalata! 🚴‍♀️✨</p>
+        </div>
+
         <!-- Area Messaggi -->
-        <div id="msg" class="mb-4 p-3 rounded hidden"></div>
+        <div id="msg" class="mb-4 p-3 rounded-xl hidden"></div>
 
         <!-- Tabs -->
-        <div class="flex border-b border-gray-300 mb-6">
-            <button onclick="switchTab('uscite')" id="tab-uscite" class="px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600">Uscite Settimanali</button>
-            <button onclick="switchTab('gare')" id="tab-gare" class="px-4 py-2 font-semibold text-gray-500 hover:text-blue-600">Gare</button>
-            <div id="admin-btns" class="ml-auto hidden"></div>
+        <div class="flex gap-2 mb-6 mt-4">
+            <button onclick="switchTab('uscite')" id="tab-uscite" class="btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600">🗺️ Uscite Settimanali</button>
+            <button onclick="switchTab('gare')" id="tab-gare" class="btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600">🏁 Gare</button>
+            <div id="admin-btns" class="ml-auto hidden flex items-center gap-2"></div>
         </div>
 
         <!-- Contenuto -->
         <div id="content-area"></div>
     </main>
 
+    <!-- Footer -->
+    <footer class="text-center py-6 text-sm text-gray-500">
+        Fatto con ❤️ e tanta fatica in salita — <span class="font-semibold">Pedale Allegro</span> 🚴
+    </footer>
+
     <!-- Modale Admin (Nascosto di default) -->
     <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-            <h3 id="modal-title" class="text-xl font-bold mb-4"></h3>
+        <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-md card-anim">
+            <h3 id="modal-title" class="text-xl font-extrabold mb-4 text-orange-600"></h3>
             <form id="admin-form" class="space-y-4">
                 <input type="hidden" id="form-type">
-                <input type="text" id="f-titolo" placeholder="Titolo" required class="w-full p-2 border rounded">
-                <input type="date" id="f-data" required class="w-full p-2 border rounded">
-                <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-2 border rounded">
+                <input type="text" id="f-titolo" placeholder="✨ Titolo" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <input type="date" id="f-data" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
                 <div id="gpx-input-area" class="hidden">
-                    <label class="block text-sm font-medium mb-1">Traccia GPX:</label>
-                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border rounded">
+                    <label class="block text-sm font-semibold mb-1">📍 Traccia GPX (opzionale):</label>
+                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border-2 border-dashed border-orange-200 rounded-xl">
                 </div>
-                <div class="flex gap-2">
-                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Salva</button>
-                    <button type="button" onclick="closeModal()" class="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Annulla</button>
+                <div class="flex gap-2 pt-2">
+                    <button type="submit" class="btn-friendly bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600">💾 Salva</button>
+                    <button type="button" onclick="closeModal()" class="btn-friendly bg-gray-100 text-gray-600 px-5 py-2 rounded-full font-bold hover:bg-gray-200">Annulla</button>
                 </div>
             </form>
         </div>
@@ -72,8 +94,8 @@
         // Gestione UI e Messaggi
         const showMsg = (text, type = 'success') => {
             const msg = document.getElementById('msg');
-            msg.textContent = text;
-            msg.className = `mb-4 p-3 rounded ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+            msg.textContent = (type === 'success' ? '🎉 ' : '😅 ') + text;
+            msg.className = `mb-4 p-3 rounded-xl font-semibold card-anim ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
             msg.classList.remove('hidden');
             setTimeout(() => msg.classList.add('hidden'), 4000);
         };
@@ -97,14 +119,14 @@
             const area = document.getElementById('auth-area');
             const adminBtns = document.getElementById('admin-btns');
             if (!currentUser) {
-                area.innerHTML = `<button onclick="login()" class="bg-white text-blue-900 px-3 py-1 rounded font-semibold">Accedi</button>`;
+                area.innerHTML = `<button onclick="login()" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Accedi</button>`;
                 adminBtns.classList.add('hidden');
             } else {
-                area.innerHTML = `<span>Ciao ${currentUser.user_metadata?.nome || 'Atleta'}</span> <button onclick="logout()" class="text-sm underline">Esci</button>`;
+                area.innerHTML = `<span class="text-sm md:text-base font-semibold">Ciao ${currentUser.user_metadata?.nome || 'Atleta'}! 👋</span> <button onclick="logout()" class="btn-friendly bg-white/20 px-3 py-1 rounded-full text-sm hover:bg-white/30">Esci</button>`;
                 if (isAdmin) {
                     adminBtns.innerHTML = `
-                        <button onclick="openModal('uscita')" class="bg-green-500 text-white px-3 py-1 rounded text-sm mr-2">+ Uscita</button>
-                        <button onclick="openModal('gara')" class="bg-purple-500 text-white px-3 py-1 rounded text-sm">+ Gara</button>
+                        <button onclick="openModal('uscita')" class="btn-friendly bg-emerald-500 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow">➕ Uscita</button>
+                        <button onclick="openModal('gara')" class="btn-friendly bg-violet-500 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow">➕ Gara</button>
                     `;
                     adminBtns.classList.remove('hidden');
                 } else {
@@ -142,35 +164,37 @@
 
         // --- CARICAMENTO DATI ---
         function switchTab(tab) {
-            document.getElementById('tab-uscite').className = tab === 'uscite' ? 'px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600' : 'px-4 py-2 font-semibold text-gray-500';
-            document.getElementById('tab-gare').className = tab === 'gare' ? 'px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600' : 'px-4 py-2 font-semibold text-gray-500';
+            const active = 'btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600';
+            const inactive = 'btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600';
+            document.getElementById('tab-uscite').className = tab === 'uscite' ? active : inactive;
+            document.getElementById('tab-gare').className = tab === 'gare' ? active : inactive;
             loadData(tab);
         }
 
         async function loadData(tab = 'uscite') {
             const area = document.getElementById('content-area');
-            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> Caricamento...</div>';
+            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> <span class="text-sm text-gray-500">Caricamento, un attimo... ⏳</span></div>';
 
             if (tab === 'uscite') {
                 const { data } = await sb.from('uscite').select('*').order('data_uscita', { ascending: false });
                 area.innerHTML = '<div class="space-y-4" id="list-uscite"></div>';
                 if (data && data.length > 0) data.forEach(renderUscita);
-                else area.innerHTML = '<p class="text-gray-500">Nessuna uscita programmata.</p>';
+                else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🚴‍♂️💨</p><p class="text-gray-500 font-semibold">Ancora nessuna uscita programmata!</p><p class="text-sm text-gray-400 mt-1">Ritorna presto a trovarci, ne vedremo delle belle. 😉</p></div>';
             } else {
                 const { data } = await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara', { ascending: false });
                 area.innerHTML = '<div class="space-y-4" id="list-gare"></div>';
                 if (data && data.length > 0) data.forEach(renderGara);
-                else area.innerHTML = '<p class="text-gray-500">Nessuna gara in programma.</p>';
+                else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🏁😴</p><p class="text-gray-500 font-semibold">Nessuna gara in programma al momento.</p><p class="text-sm text-gray-400 mt-1">Ma non temere: ci stiamo allenando per te! 💪</p></div>';
             }
         }
 
         // --- RENDERING ---
         function renderUscita(item) {
             const div = document.createElement('div');
-            div.className = "bg-white p-4 rounded-lg shadow border-l-4 border-blue-500";
+            div.className = "bg-white p-5 rounded-2xl shadow border-l-4 border-orange-400 card-anim";
             div.innerHTML = `
-                <h3 class="font-bold text-lg">${item.titolo}</h3>
-                <p class="text-sm text-gray-500">📅 ${item.data_uscita} | ${item.descrizione || ''}</p>
+                <h3 class="font-extrabold text-lg text-gray-800">🚴 ${item.titolo}</h3>
+                <p class="text-sm text-gray-500 mt-1">📅 ${item.data_uscita} ${item.descrizione ? '| ' + item.descrizione : ''}</p>
                 <div id="map-${item.id}" class="map-container"></div>
             `;
             document.getElementById('list-uscite').appendChild(div);
@@ -185,7 +209,7 @@
                     }).addTo(map);
                 }, 100);
             } else {
-                document.getElementById(`map-${item.id}`).innerHTML = '<p class="p-4 text-gray-400">Traccia GPX non disponibile</p>';
+                document.getElementById(`map-${item.id}`).innerHTML = '<div class="flex items-center justify-center h-full bg-orange-50 text-gray-400 text-sm font-semibold"><span>🗺️ La traccia arriverà presto, stay tuned!</span></div>';
             }
         }
 
@@ -194,23 +218,23 @@
             const isIscritto = currentUser && iscritti.some(i => i.user_id === currentUser.id);
             
             const div = document.createElement('div');
-            div.className = "bg-white p-4 rounded-lg shadow border-l-4 border-purple-500";
+            div.className = "bg-white p-5 rounded-2xl shadow border-l-4 border-violet-400 card-anim";
             div.innerHTML = `
-                <div class="flex justify-between items-start">
+                <div class="flex justify-between items-start gap-2">
                     <div>
-                        <h3 class="font-bold text-lg">${item.titolo}</h3>
-                        <p class="text-sm text-gray-500">📅 ${item.data_gara} | 📍 ${item.luogo || 'Da definire'}</p>
+                        <h3 class="font-extrabold text-lg text-gray-800">🏁 ${item.titolo}</h3>
+                        <p class="text-sm text-gray-500 mt-1">📅 ${item.data_gara} | 📍 ${item.luogo || 'Da definire'}</p>
                     </div>
                     ${currentUser && !isAdmin ? (
                         isIscritto 
-                        ? `<button onclick="disiscriviti(${item.id})" class="bg-red-100 text-red-600 px-3 py-1 rounded text-sm">Annulla</button>`
-                        : `<button onclick="iscriviti(${item.id})" class="bg-purple-600 text-white px-3 py-1 rounded text-sm">Partecipa</button>`
+                        ? `<button onclick="disiscriviti(${item.id})" class="btn-friendly bg-red-50 text-red-500 px-4 py-1.5 rounded-full text-sm font-bold border border-red-200">😞 Ritiro</button>`
+                        : `<button onclick="iscriviti(${item.id})" class="btn-friendly bg-violet-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">💪 Partecipa!</button>`
                     ) : ''}
                 </div>
                 <div class="mt-4">
-                    <h4 class="font-semibold text-sm mb-1">Partecipanti (${iscritti.length}):</h4>
+                    <h4 class="font-bold text-sm mb-2 text-gray-600">Chi partecipa? (${iscritti.length}) 🎟️</h4>
                     <div class="flex flex-wrap gap-2">
-                        ${iscritti.length > 0 ? iscritti.map(i => `<span class="bg-gray-100 px-2 py-1 rounded text-sm">${i.profiles?.nome || 'Anonimo'}</span>`).join('') : '<span class="text-sm text-gray-400">Ancora nessun iscritto.</span>'}
+                        ${iscritti.length > 0 ? iscritti.map(i => `<span class="bg-violet-50 text-violet-700 px-3 py-1 rounded-full text-sm font-semibold">😊 ${i.profiles?.nome || 'Anonimo'}</span>`).join('') : '<span class="text-sm text-gray-400">Sii il primo a iscriverti, ti aspettiamo! ✨</span>'}
                     </div>
                 </div>
             `;
@@ -220,14 +244,14 @@
         // --- AZIONI UTENTE ---
         async function iscriviti(garaId) {
             const { error } = await sb.from('iscrizioni').insert({ user_id: currentUser.id, gara_id: garaId });
-            if (error) showMsg("Errore iscrizione", 'error');
-            else { showMsg("Iscritto!"); loadData('gare'); }
+            if (error) showMsg("Ops! Qualcosa è andato storto con l'iscrizione.", 'error');
+            else { showMsg("Evviva! Iscrizione confermata, ci vediamo lì! 🙌"); loadData('gare'); }
         }
 
         async function disiscriviti(garaId) {
             const { error } = await sb.from('iscrizioni').delete().eq('user_id', currentUser.id).eq('gara_id', garaId);
-            if (error) showMsg("Errore", 'error');
-            else { showMsg("Iscrizione annullata."); loadData('gare'); }
+            if (error) showMsg("Ops! Non siamo riusciti ad annullare l'iscrizione.", 'error');
+            else { showMsg("Iscrizione annullata. Ti aspettiamo alla prossima! 👋"); loadData('gare'); }
         }
 
         // --- ADMIN MODALE & UPLOAD ---
@@ -264,12 +288,12 @@
 
             if (type === 'uscita') {
                 const { error } = await sb.from('uscite').insert({ titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl });
-                if (error) showMsg("Errore salvataggio", 'error');
-                else showMsg("Uscita creata!");
+                if (error) showMsg("Ops! Non siamo riusciti a salvare l'uscita.", 'error');
+                else showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
             } else {
                 const { error } = await sb.from('gare').insert({ titolo, data_gara: data, luogo: extra });
-                if (error) showMsg("Errore salvataggio", 'error');
-                else showMsg("Gara creata!");
+                if (error) showMsg("Ops! Non siamo riusciti a salvare la gara.", 'error');
+                else showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
             }
             
             closeModal();
