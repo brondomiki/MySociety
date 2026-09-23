@@ -1,634 +1,283 @@
 <!DOCTYPE html>
-<html lang="it" class="dark">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASD Pedale Fulmine - Portale Società Ciclistica</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Portale Ciclismo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0fdf4',
-                            500: '#22c55e',
-                            600: '#16a34a',
-                            700: '#15803d',
-                            900: '#14532d',
-                            950: '#052e16',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <!-- FontAwesome for sport & UI icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        /* Custom scrollbar for chat and tables */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .map-container { height: 300px; width: 100%; border-radius: 8px; margin-top: 10px; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
+<body class="bg-gray-100 text-gray-800 font-sans">
 
-    <header class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('uscite')">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center shadow-md shadow-brand-900/30">
-                    <i class="fa-solid fa-person-biking text-white text-xl"></i>
-                </div>
-                <div>
-                    <h1 class="font-bold text-lg sm:text-xl tracking-tight text-white">ASD Pedale Fulmine</h1>
-                    <p class="text-xs text-brand-400 font-medium hidden sm:block">Portale Ufficiale Società Ciclistica</p>
-                </div>
-            </div>
+    <!-- Header & Login -->
+    <nav class="bg-blue-900 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold">🚴 Società Ciclistica</h1>
+        <div id="auth-area" class="flex items-center gap-4"></div>
+    </nav>
 
-            <!-- Desktop & Mobile Nav Tabs -->
-            <nav class="flex items-center space-x-1 sm:space-x-2">
-                <button onclick="switchTab('uscite')" id="nav-uscite" class="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 bg-brand-600 text-white shadow-lg shadow-brand-900/30">
-                    <i class="fa-solid fa-calendar-days"></i>
-                    <span>Uscite</span>
-                </button>
-                <button onclick="switchTab('chat')" id="nav-chat" class="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-comments"></i>
-                    <span>Chat Live</span>
-                    <span id="chat-badge" class="hidden bg-brand-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">New</span>
-                </button>
-                <button onclick="switchTab('admin')" id="nav-admin" class="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white">
-                    <i class="fa-solid fa-gauge-high"></i>
-                    <span class="hidden sm:inline">Amministrazione</span>
-                    <span class="sm:hidden">Admin</span>
-                </button>
-            </nav>
+    <main class="max-w-4xl mx-auto p-4">
+        <!-- Area Messaggi -->
+        <div id="msg" class="mb-4 p-3 rounded hidden"></div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-300 mb-6">
+            <button onclick="switchTab('uscite')" id="tab-uscite" class="px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600">Uscite Settimanali</button>
+            <button onclick="switchTab('gare')" id="tab-gare" class="px-4 py-2 font-semibold text-gray-500 hover:text-blue-600">Gare</button>
+            <div id="admin-btns" class="ml-auto hidden"></div>
         </div>
-    </header>
 
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-
-        <!-- ================= TAB 1: USCITE IN PROGRAMMA ================= -->
-        <section id="tab-uscite" class="space-y-6">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 backdrop-blur-sm">
-                <div>
-                    <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                        <i class="fa-solid fa-route text-brand-400"></i> Uscite in Programma
-                    </h2>
-                    <p class="text-sm text-slate-400 mt-1">Consulta il calendario settimanale, scarica le tracce GPX e unisciti al gruppo.</p>
-                </div>
-                <!-- Filters -->
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-xs text-slate-400 font-medium mr-1">Filtra livello:</span>
-                    <button onclick="filterRides('tutti')" id="filter-tutti" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white transition">Tutti</button>
-                    <button onclick="filterRides('Turistica')" id="filter-Turistica" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Turistica</button>
-                    <button onclick="filterRides('Media')" id="filter-Media" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Media</button>
-                    <button onclick="filterRides('Avanzata')" id="filter-Avanzata" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Avanzata</button>
-                </div>
-            </div>
-
-            <!-- Rides Grid -->
-            <div id="rides-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Dynamic cards injected via JS -->
-            </div>
-        </section>
-
-        <!-- ================= TAB 2: CHAT COLLETTIVA ================= -->
-        <section id="tab-chat" class="hidden space-y-4 h-[calc(100vh-12rem)] flex flex-col">
-            <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 backdrop-blur-sm flex items-center justify-between">
-                <div>
-                    <h2 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                        <i class="fa-solid fa-comments text-brand-400"></i> Chat Spogliatoio & Uscite
-                    </h2>
-                    <p class="text-xs text-slate-400">Parla con i soci, concorda cambi di programma o organizza il caffè post-ritrovo.</p>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <label for="chat-author" class="text-xs text-slate-400 font-medium">Il tuo nome:</label>
-                    <input type="text" id="chat-author" value="Ciclista ASD" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500 w-32 sm:w-40" onchange="updateChatAuthor(this.value)">
-                </div>
-            </div>
-
-            <!-- Chat Messages Box -->
-            <div id="chat-container" class="flex-1 bg-slate-900/40 border border-slate-800 rounded-2xl p-4 overflow-y-auto space-y-4 shadow-inner flex flex-col">
-                <!-- Messages injected here -->
-            </div>
-
-            <!-- Chat Input Form -->
-            <form onsubmit="sendChatMessage(event)" class="flex gap-2 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
-                <input type="text" id="chat-input" placeholder="Scrivi un messaggio alla squadra..." class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500" required autocomplete="off">
-                <button type="submit" class="bg-brand-600 hover:bg-brand-500 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition flex items-center gap-2 shadow-lg shadow-brand-900/20">
-                    <span>Invia</span>
-                    <i class="fa-solid fa-paper-plane text-xs"></i>
-                </button>
-            </form>
-        </section>
-
-        <!-- ================= TAB 3: AREA AMMINISTRAZIONE ================= -->
-        <section id="tab-admin" class="hidden space-y-6">
-            <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 backdrop-blur-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                    <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                        <i class="fa-solid fa-gauge-high text-brand-400"></i> Gestione Uscite (Amministratori)
-                    </h2>
-                    <p class="text-sm text-slate-400 mt-1">Crea nuove uscite in calendario o rimuovi quelle passate. Le modifiche saranno visibili istantaneamente a tutti i soci.</p>
-                </div>
-                <button onclick="resetDefaultRides()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl transition border border-slate-700">
-                    <i class="fa-solid fa-rotate-right mr-1"></i> Ripristina Dati Default
-                </button>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Add Ride Form -->
-                <div class="lg:col-span-1 bg-slate-900/40 p-6 rounded-2xl border border-slate-800">
-                    <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-circle-plus text-brand-400"></i> Nuova Uscita
-                    </h3>
-                    <form onsubmit="handleAddRide(event)" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1">Titolo Uscita</label>
-                            <input type="text" id="ride-title" required placeholder="es. Giro dei Laghi" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Data</label>
-                                <input type="date" id="ride-date" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Ora Partenza</label>
-                                <input type="time" id="ride-time" required value="08:30" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1">Punto di Ritrovo</label>
-                            <input type="text" id="ride-location" required placeholder="es. Bar Sport, Via Roma 10" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Distanza (km)</label>
-                                <input type="number" step="0.1" id="ride-distance" required placeholder="65.5" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Dislivello (m)</label>
-                                <input type="number" id="ride-elevation" required placeholder="850" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Livello Difficoltà</label>
-                                <select id="ride-level" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                                    <option value="Turistica">Turistica (Tranquilla)</option>
-                                    <option value="Media">Media (Passo regolare)</option>
-                                    <option value="Avanzata">Avanzata (Allenamento)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Capogruppo / Leader</label>
-                                <input type="text" id="ride-leader" required placeholder="Mario Rossi" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-300 mb-1">Note e Descrizione</label>
-                            <textarea id="ride-notes" rows="2" placeholder="Es. Sosta caffè a metà percorso. Obbligatorio casco e kit foratura." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-brand-500"></textarea>
-                        </div>
-                        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg shadow-brand-900/30 flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-plus"></i>
-                            <span>Pubblica Uscita</span>
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Active Rides List for Management -->
-                <div class="lg:col-span-2 bg-slate-900/40 p-6 rounded-2xl border border-slate-800">
-                    <h3 class="text-lg font-bold text-white mb-4 flex items-center justify-between">
-                        <span class="flex items-center gap-2"><i class="fa-solid fa-list-check text-brand-400"></i> Uscite Attive in Calendario</span>
-                        <span id="admin-rides-count" class="text-xs bg-slate-800 text-brand-400 px-2.5 py-1 rounded-full">0 uscite</span>
-                    </h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
-                                    <th class="py-3 px-3">Data / Ora</th>
-                                    <th class="py-3 px-3">Titolo</th>
-                                    <th class="py-3 px-3">Livello</th>
-                                    <th class="py-3 px-3">Dati</th>
-                                    <th class="py-3 px-3 text-right">Azioni</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-rides-table-body" class="divide-y divide-slate-800/60 text-sm">
-                                <!-- Dynamic rows -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
+        <!-- Contenuto -->
+        <div id="content-area"></div>
     </main>
 
-    <!-- Custom Notification Modal (No alert()) -->
-    <div id="custom-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
-            <div id="modal-icon" class="w-14 h-14 bg-brand-500/20 text-brand-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-check"></i>
-            </div>
-            <h3 id="modal-title" class="text-lg font-bold text-white">Notifica</h3>
-            <p id="modal-message" class="text-sm text-slate-300">Messaggio descrittivo qui.</p>
-            <button onclick="closeModal()" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-sm transition">
-                Ho capito
-            </button>
+    <!-- Modale Admin (Nascosto di default) -->
+    <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <h3 id="modal-title" class="text-xl font-bold mb-4"></h3>
+            <form id="admin-form" class="space-y-4">
+                <input type="hidden" id="form-type">
+                <input type="text" id="f-titolo" placeholder="Titolo" required class="w-full p-2 border rounded">
+                <input type="date" id="f-data" required class="w-full p-2 border rounded">
+                <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-2 border rounded">
+                <div id="gpx-input-area" class="hidden">
+                    <label class="block text-sm font-medium mb-1">Traccia GPX:</label>
+                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border rounded">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Salva</button>
+                    <button type="button" onclick="closeModal()" class="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Annulla</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="mt-auto border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
-        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p>&copy; 2026 ASD Pedale Fulmine. Tutti i diritti riservati.</p>
-            <div class="flex space-x-4">
-                <a href="#" class="hover:text-slate-400 transition">Regolamento Sociale</a>
-                <a href="#" class="hover:text-slate-400 transition">Sicurezza in Bici</a>
-                <a href="#" class="hover:text-slate-400 transition">Contatti</a>
-            </div>
-        </div>
-    </footer>
-
     <script>
-        // Initial Mock Default Rides
-        const defaultRides = [
-            {
-                id: 'ride-1',
-                title: 'Giro dei Colli Storici',
-                date: '2026-03-29',
-                time: '08:00',
-                location: 'Piazza Centrale, Bar del Corso',
-                distance: 72.4,
-                elevation: 980,
-                level: 'Media',
-                leader: 'Marco Bianchi',
-                notes: 'Tracciato ondulato con due salite pedalabili. Ristoro a metà percorso previsto.',
-                participants: ['Marco Bianchi', 'Luca Verdi', 'Giulia Neri']
-            },
-            {
-                id: 'ride-2',
-                title: 'Scalata Passo Alpino',
-                date: '2026-04-05',
-                time: '07:30',
-                location: 'Parcheggio Stadio Comunale',
-                distance: 95.0,
-                elevation: 1850,
-                level: 'Avanzata',
-                leader: 'Roberto Moretti',
-                notes: 'Uscita impegnativa riservata a soci allenati. Rapporti agili consigliati (min 34x32).',
-                participants: ['Roberto Moretti', 'Davide Rossi']
-            },
-            {
-                id: 'ride-3',
-                title: 'Cicloturistica dei Fiumi',
-                date: '2026-04-12',
-                time: '09:00',
-                location: 'Parco Naturale, Ingresso Nord',
-                distance: 48.2,
-                elevation: 250,
-                level: 'Turistica',
-                leader: 'Elena Gialli',
-                notes: 'Percorso pianeggiante su piste ciclabili e strade a basso traffico. Ideale per tutti.',
-                participants: ['Elena Gialli', 'Paola Neri', 'Franco Blu', 'Sara Rosa']
-            }
-        ];
+        // --- CONFIGURAZIONE: INSERISCI QUI I TUOI DATI DI SUPABASE ---
+        const SUPABASE_URL = 'https://wrcvolbhjpzyraooldmt.supabase.co/rest/v1/';
+        const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
+        // -------------------------------------------------------------
 
-        // Initial Mock Chat Messages
-        const defaultMessages = [
-            { id: 1, author: 'Marco Bianchi', text: 'Buongiorno soci! Domenica prossima bel tempo previsto sui colli, carichi?', time: '09:15' },
-            { id: 2, author: 'Luca Verdi', text: 'Presente! Ho montato le ruote nuove, non vedo l ora di provarle.', time: '09:22' },
-            { id: 3, author: 'Elena Gialli', text: 'Ricordo a tutti di portare il kit antiforatura e la borraccia piena!', time: '10:05' }
-        ];
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let currentUser = null;
+        let isAdmin = false;
 
-        let rides = JSON.parse(localStorage.getItem('asd_rides')) || defaultRides;
-        let messages = JSON.parse(localStorage.getItem('asd_messages')) || defaultMessages;
-        let currentFilter = 'tutti';
-        let chatAuthorName = localStorage.getItem('asd_chat_author') || 'Ciclista ASD';
+        // Gestione UI e Messaggi
+        const showMsg = (text, type = 'success') => {
+            const msg = document.getElementById('msg');
+            msg.textContent = text;
+            msg.className = `mb-4 p-3 rounded ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 4000);
+        };
 
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('chat-author').value = chatAuthorName;
-            renderRides();
-            renderAdminTable();
-            renderChatMessages();
+        // --- AUTENTICAZIONE ---
+        async function checkUser() {
+            const { data: { session } } = await sb.auth.getSession();
+            currentUser = session?.user;
+            renderAuthUI();
+            if (currentUser) await checkRole();
+            loadData();
+        }
 
-            // Set default date for admin form to tomorrow
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 3);
-            document.getElementById('ride-date').value = tomorrow.toISOString().split('T')[0];
-        });
+        async function checkRole() {
+            const { data } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).single();
+            isAdmin = data?.is_admin || false;
+            renderAuthUI();
+        }
 
-        // Tab Switching Logic
-        function switchTab(tabId) {
-            ['uscite', 'chat', 'admin'].forEach(id => {
-                const section = document.getElementById(`tab-${id}`);
-                const btn = document.getElementById(`nav-${id}`);
-                if (id === tabId) {
-                    section.classList.remove('hidden');
-                    btn.className = "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 bg-brand-600 text-white shadow-lg shadow-brand-900/30";
+        function renderAuthUI() {
+            const area = document.getElementById('auth-area');
+            const adminBtns = document.getElementById('admin-btns');
+            if (!currentUser) {
+                area.innerHTML = `<button onclick="login()" class="bg-white text-blue-900 px-3 py-1 rounded font-semibold">Accedi</button>`;
+                adminBtns.classList.add('hidden');
+            } else {
+                area.innerHTML = `<span>Ciao ${currentUser.user_metadata?.nome || 'Atleta'}</span> <button onclick="logout()" class="text-sm underline">Esci</button>`;
+                if (isAdmin) {
+                    adminBtns.innerHTML = `
+                        <button onclick="openModal('uscita')" class="bg-green-500 text-white px-3 py-1 rounded text-sm mr-2">+ Uscita</button>
+                        <button onclick="openModal('gara')" class="bg-purple-500 text-white px-3 py-1 rounded text-sm">+ Gara</button>
+                    `;
+                    adminBtns.classList.remove('hidden');
                 } else {
-                    section.classList.add('hidden');
-                    btn.className = "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white";
-                }
-            });
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // Render Rides Grid
-        function renderRides() {
-            const grid = document.getElementById('rides-grid');
-            grid.innerHTML = '';
-
-            const filtered = currentFilter === 'tutti' 
-                ? rides 
-                : rides.filter(r => r.level === currentFilter);
-
-            if (filtered.length === 0) {
-                grid.innerHTML = `
-                    <div class="col-span-full text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/60">
-                        <i class="fa-solid fa-triangle-exclamation text-3xl text-slate-500 mb-3"></i>
-                        <p class="text-slate-400 text-sm">Nessuna uscita trovata per il filtro selezionato.</p>
-                    </div>
-                `;
-                return;
-            }
-
-            filtered.forEach(ride => {
-                const badgeColor = ride.level === 'Turistica' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
-                                   ride.level === 'Media' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 
-                                   'bg-rose-500/10 text-rose-400 border-rose-500/30';
-
-                const formattedDate = new Date(ride.date).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-
-                const card = document.createElement('div');
-                card.className = "bg-slate-900/70 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg relative group overflow-hidden";
-                card.innerHTML = `
-                    <div class="absolute top-0 right-0 w-32 h-32 bg-brand-500/5 rounded-full blur-2xl group-hover:bg-brand-500/10 transition"></div>
-                    <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="text-xs px-2.5 py-1 rounded-full border font-semibold uppercase tracking-wider ${badgeColor}">
-                                ${ride.level}
-                            </span>
-                            <span class="text-xs text-slate-400 flex items-center gap-1">
-                                <i class="fa-regular fa-clock"></i> ${ride.time}
-                            </span>
-                        </div>
-                        <h3 class="text-lg font-bold text-white mb-1 group-hover:text-brand-400 transition">${ride.title}</h3>
-                        <p class="text-xs text-brand-300 font-medium capitalize mb-3 flex items-center gap-1.5">
-                            <i class="fa-regular fa-calendar"></i> ${formattedDate}
-                        </p>
-                        
-                        <div class="grid grid-cols-2 gap-2 my-4 bg-slate-950/50 p-3 rounded-xl border border-slate-800/80">
-                            <div>
-                                <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Distanza</span>
-                                <span class="text-sm font-bold text-white"><i class="fa-solid fa-road text-brand-400 mr-1"></i> ${ride.distance} km</span>
-                            </div>
-                            <div>
-                                <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Dislivello</span>
-                                <span class="text-sm font-bold text-white"><i class="fa-solid fa-mountain text-brand-400 mr-1"></i> +${ride.elevation} m</span>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2 text-xs text-slate-300 mb-4">
-                            <p class="flex items-start gap-2">
-                                <i class="fa-solid fa-location-dot text-brand-400 mt-0.5"></i>
-                                <span class="truncate"><strong>Ritrovo:</strong> ${ride.location}</span>
-                            </p>
-                            <p class="flex items-center gap-2">
-                                <i class="fa-solid fa-user-tie text-brand-400"></i>
-                                <span><strong>Capogruppo:</strong> ${ride.leader}</span>
-                            </p>
-                            ${ride.notes ? `<p class="text-slate-400 italic bg-slate-950/30 p-2 rounded-lg mt-2">"${ride.notes}"</p>` : ''}
-                        </div>
-                    </div>
-
-                    <div class="pt-4 border-t border-slate-800/80 flex items-center gap-2">
-                        <button onclick="downloadGPX('${ride.title}')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 border border-slate-700">
-                            <i class="fa-solid fa-download text-brand-400"></i>
-                            <span>Scarica GPX</span>
-                        </button>
-                        <button onclick="joinRide('${ride.id}')" class="flex-1 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-brand-900/30">
-                            <i class="fa-solid fa-check"></i>
-                            <span>Partecipa (${ride.participants ? ride.participants.length : 0})</span>
-                        </button>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        // Filter Rides
-        function filterRides(level) {
-            currentFilter = level;
-            ['tutti', 'Turistica', 'Media', 'Avanzata'].forEach(lvl => {
-                const btn = document.getElementById(`filter-${lvl}`);
-                if (lvl === level) {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white transition";
-                } else {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition";
-                }
-            });
-            renderRides();
-        }
-
-        // Simulate GPX Download
-        function downloadGPX(title) {
-            showModal(
-                'Download Traccia GPX', 
-                `Il file GPX per l'uscita "${title}" è stato generato con successo e inviato al tuo ciclocomputer / dispositivo mobile.`,
-                'fa-solid fa-file-arrow-down'
-            );
-        }
-
-        // Join Ride Simulation
-        function joinRide(rideId) {
-            const ride = rides.find(r => r.id === rideId);
-            if (ride) {
-                if (!ride.participants) ride.participants = [];
-                if (!ride.participants.includes(chatAuthorName)) {
-                    ride.participants.push(chatAuthorName);
-                    localStorage.setItem('asd_rides', JSON.stringify(rides));
-                    renderRides();
-                    renderAdminTable();
-                    showModal('Registrazione Confermata!', `Ti sei iscritto con successo all'uscita "${ride.title}". Il capogruppo è stato avvisato.`, 'fa-solid fa-bicycle');
-                } else {
-                    showModal('Già Iscritto', 'Risulti già iscritto a questa uscita.', 'fa-solid fa-circle-info');
+                    adminBtns.classList.add('hidden');
                 }
             }
         }
 
-        // Admin: Add Ride
-        function handleAddRide(e) {
-            e.preventDefault();
-            const newRide = {
-                id: 'ride-' + Date.now(),
-                title: document.getElementById('ride-title').value,
-                date: document.getElementById('ride-date').value,
-                time: document.getElementById('ride-time').value,
-                location: document.getElementById('ride-location').value,
-                distance: parseFloat(document.getElementById('ride-distance').value),
-                elevation: parseInt(document.getElementById('ride-elevation').value),
-                level: document.getElementById('ride-level').value,
-                leader: document.getElementById('ride-leader').value,
-                notes: document.getElementById('ride-notes').value,
-                participants: [document.getElementById('ride-leader').value]
-            };
+        async function login() {
+            const nome = prompt("Il tuo nome (solo la prima volta):");
+            const email = prompt("La tua email:");
+            const password = prompt("Password (almeno 6 caratteri):");
+            if (!email || !password) return;
 
-            rides.unshift(newRide);
-            localStorage.setItem('asd_rides', JSON.stringify(rides));
-            renderRides();
-            renderAdminTable();
-            e.target.reset();
+            const { data, error } = await sb.auth.signInWithPassword({ email, password });
+            if (error) {
+                // Se non esiste, proviamo a registrarlo
+                const { error: regError } = await sb.auth.signUp({ 
+                    email, password, 
+                    options: { data: { nome: nome || 'Utente' } } 
+                });
+                if (regError) showMsg(regError.message, 'error');
+                else showMsg("Registrato! Controlla email per conferma o riprova il login.");
+            } else {
+                await checkUser();
+            }
+        }
+
+        async function logout() {
+            await sb.auth.signOut();
+            isAdmin = false;
+            currentUser = null;
+            location.reload();
+        }
+
+        // --- CARICAMENTO DATI ---
+        function switchTab(tab) {
+            document.getElementById('tab-uscite').className = tab === 'uscite' ? 'px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600' : 'px-4 py-2 font-semibold text-gray-500';
+            document.getElementById('tab-gare').className = tab === 'gare' ? 'px-4 py-2 font-semibold text-blue-600 border-b-2 border-blue-600' : 'px-4 py-2 font-semibold text-gray-500';
+            loadData(tab);
+        }
+
+        async function loadData(tab = 'uscite') {
+            const area = document.getElementById('content-area');
+            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> Caricamento...</div>';
+
+            if (tab === 'uscite') {
+                const { data } = await sb.from('uscite').select('*').order('data_uscita', { ascending: false });
+                area.innerHTML = '<div class="space-y-4" id="list-uscite"></div>';
+                if (data && data.length > 0) data.forEach(renderUscita);
+                else area.innerHTML = '<p class="text-gray-500">Nessuna uscita programmata.</p>';
+            } else {
+                const { data } = await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara', { ascending: false });
+                area.innerHTML = '<div class="space-y-4" id="list-gare"></div>';
+                if (data && data.length > 0) data.forEach(renderGara);
+                else area.innerHTML = '<p class="text-gray-500">Nessuna gara in programma.</p>';
+            }
+        }
+
+        // --- RENDERING ---
+        function renderUscita(item) {
+            const div = document.createElement('div');
+            div.className = "bg-white p-4 rounded-lg shadow border-l-4 border-blue-500";
+            div.innerHTML = `
+                <h3 class="font-bold text-lg">${item.titolo}</h3>
+                <p class="text-sm text-gray-500">📅 ${item.data_uscita} | ${item.descrizione || ''}</p>
+                <div id="map-${item.id}" class="map-container"></div>
+            `;
+            document.getElementById('list-uscite').appendChild(div);
             
-            // Set default date again
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 3);
-            document.getElementById('ride-date').value = tomorrow.toISOString().split('T')[0];
-
-            showModal('Uscita Pubblicata', 'La nuova uscita è stata inserita correttamente nel calendario societario.', 'fa-solid fa-circle-check');
-        }
-
-        // Admin: Delete Ride
-        function deleteRide(id) {
-            rides = rides.filter(r => r.id !== id);
-            localStorage.setItem('asd_rides', JSON.stringify(rides));
-            renderRides();
-            renderAdminTable();
-            showModal('Uscita Rimossa', 'L uscita è stata eliminata dal portale.', 'fa-solid fa-trash-can');
-        }
-
-        // Admin: Reset Default Rides
-        function resetDefaultRides() {
-            rides = [...defaultRides];
-            localStorage.setItem('asd_rides', JSON.stringify(rides));
-            renderRides();
-            renderAdminTable();
-            showModal('Ripristinato', 'Il calendario è stato reimpostato ai dati predefiniti.', 'fa-solid fa-rotate-right');
-        }
-
-        // Render Admin Table
-        function renderAdminTable() {
-            const tbody = document.getElementById('admin-rides-table-body');
-            document.getElementById('admin-rides-count').innerText = `${rides.length} uscite`;
-            tbody.innerHTML = '';
-
-            if (rides.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-slate-500">Nessuna uscita in archivio.</td></tr>`;
-                return;
+            // Mappa GPX
+            if (item.gpx_url) {
+                setTimeout(() => {
+                    const map = L.map(`map-${item.id}`).setView([45.5, 9.2], 10); // Default su Italia
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+                    new L.GPX(item.gpx_url, { async: true }).on('loaded', function(e) {
+                        map.fitBounds(e.target.getBounds());
+                    }).addTo(map);
+                }, 100);
+            } else {
+                document.getElementById(`map-${item.id}`).innerHTML = '<p class="p-4 text-gray-400">Traccia GPX non disponibile</p>';
             }
-
-            rides.forEach(ride => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-800/40 transition";
-                tr.innerHTML = `
-                    <td class="py-3 px-3 text-slate-300 text-xs whitespace-nowrap">
-                        <div class="font-semibold text-white">${ride.date}</div>
-                        <div class="text-slate-400">${ride.time}</div>
-                    </td>
-                    <td class="py-3 px-3 font-semibold text-white">${ride.title}</td>
-                    <td class="py-3 px-3">
-                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-medium 
-                            ${ride.level === 'Turistica' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 
-                              ride.level === 'Media' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 
-                              'bg-rose-500/10 text-rose-400 border-rose-500/30'}">
-                            ${ride.level}
-                        </span>
-                    </td>
-                    <td class="py-3 px-3 text-xs text-slate-300">
-                        <div>${ride.distance} km • +${ride.elevation}m</div>
-                        <div class="text-slate-400 truncate max-w-[150px]">Leader: ${ride.leader}</div>
-                    </td>
-                    <td class="py-3 px-3 text-right">
-                        <button onclick="deleteRide('${ride.id}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 p-2 rounded-lg transition text-xs border border-rose-500/20" title="Elimina uscita">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
         }
 
-        // Chat Functions
-        function updateChatAuthor(name) {
-            chatAuthorName = name.trim() || 'Ciclista ASD';
-            localStorage.setItem('asd_chat_author', chatAuthorName);
-        }
-
-        function renderChatMessages() {
-            const container = document.getElementById('chat-container');
-            container.innerHTML = '';
-
-            messages.forEach(msg => {
-                const isMe = msg.author === chatAuthorName;
-                const div = document.createElement('div');
-                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
-                div.innerHTML = `
-                    <div class="flex items-center space-x-2 mb-1">
-                        <span class="text-xs font-semibold text-slate-300">${msg.author}</span>
-                        <span class="text-[10px] text-slate-500">${msg.time}</span>
+        async function renderGara(item) {
+            const iscritti = item.iscrizioni || [];
+            const isIscritto = currentUser && iscritti.some(i => i.user_id === currentUser.id);
+            
+            const div = document.createElement('div');
+            div.className = "bg-white p-4 rounded-lg shadow border-l-4 border-purple-500";
+            div.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-bold text-lg">${item.titolo}</h3>
+                        <p class="text-sm text-gray-500">📅 ${item.data_gara} | 📍 ${item.luogo || 'Da definire'}</p>
                     </div>
-                    <div class="max-w-[85%]. sm:max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
-                        isMe 
-                            ? 'bg-brand-600 text-white rounded-tr-none' 
-                            : 'bg-slate-800 text-slate-200 border border-slate-700/60 rounded-tl-none'
-                    }">
-                        ${escapeHtml(msg.text)}
+                    ${currentUser && !isAdmin ? (
+                        isIscritto 
+                        ? `<button onclick="disiscriviti(${item.id})" class="bg-red-100 text-red-600 px-3 py-1 rounded text-sm">Annulla</button>`
+                        : `<button onclick="iscriviti(${item.id})" class="bg-purple-600 text-white px-3 py-1 rounded text-sm">Partecipa</button>`
+                    ) : ''}
+                </div>
+                <div class="mt-4">
+                    <h4 class="font-semibold text-sm mb-1">Partecipanti (${iscritti.length}):</h4>
+                    <div class="flex flex-wrap gap-2">
+                        ${iscritti.length > 0 ? iscritti.map(i => `<span class="bg-gray-100 px-2 py-1 rounded text-sm">${i.profiles?.nome || 'Anonimo'}</span>`).join('') : '<span class="text-sm text-gray-400">Ancora nessun iscritto.</span>'}
                     </div>
-                `;
-                container.appendChild(div);
-            });
-            container.scrollTop = container.scrollHeight;
+                </div>
+            `;
+            document.getElementById('list-gare').appendChild(div);
         }
 
-        function sendChatMessage(e) {
-            e.preventDefault();
-            const input = document.getElementById('chat-input');
-            const text = input.value.trim();
-            if (!text) return;
-
-            const now = new Date();
-            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
-
-            const newMsg = {
-                id: Date.now(),
-                author: chatAuthorName,
-                text: text,
-                time: timeStr
-            };
-
-            messages.push(newMsg);
-            localStorage.setItem('asd_messages', JSON.stringify(messages));
-            input.value = '';
-            renderChatMessages();
+        // --- AZIONI UTENTE ---
+        async function iscriviti(garaId) {
+            const { error } = await sb.from('iscrizioni').insert({ user_id: currentUser.id, gara_id: garaId });
+            if (error) showMsg("Errore iscrizione", 'error');
+            else { showMsg("Iscritto!"); loadData('gare'); }
         }
 
-        // Custom Modal Utility (Replaces alert)
-        function showModal(title, message, iconClass = 'fa-solid fa-check') {
-            document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-message').innerText = message;
-            document.getElementById('modal-icon').innerHTML = `<i class="${iconClass}"></i>`;
-            const modal = document.getElementById('custom-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+        async function disiscriviti(garaId) {
+            const { error } = await sb.from('iscrizioni').delete().eq('user_id', currentUser.id).eq('gara_id', garaId);
+            if (error) showMsg("Errore", 'error');
+            else { showMsg("Iscrizione annullata."); loadData('gare'); }
+        }
+
+        // --- ADMIN MODALE & UPLOAD ---
+        function openModal(type) {
+            document.getElementById('admin-modal').classList.remove('hidden');
+            document.getElementById('modal-title').textContent = type === 'uscita' ? 'Nuova Uscita' : 'Nuova Gara';
+            document.getElementById('form-type').value = type;
+            document.getElementById('gpx-input-area').className = type === 'uscita' ? '' : 'hidden';
+            document.getElementById('f-extra').placeholder = type === 'uscita' ? 'Descrizione percorso' : 'Luogo della gara';
         }
 
         function closeModal() {
-            const modal = document.getElementById('custom-modal');
-            modal.classList.remove('flex');
-            modal.classList.add('hidden');
+            document.getElementById('admin-modal').classList.add('hidden');
+            document.getElementById('admin-form').reset();
         }
 
-        // Simple HTML Escape helper
-        function escapeHtml(text) {
-            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
-        }
+        document.getElementById('admin-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const type = document.getElementById('form-type').value;
+            const titolo = document.getElementById('f-titolo').value;
+            const data = document.getElementById('f-data').value;
+            const extra = document.getElementById('f-extra').value;
+            const gpxFile = document.getElementById('f-gpx').files[0];
+
+            let gpxUrl = null;
+
+            if (type === 'uscita' && gpxFile) {
+                const filePath = `${currentUser.id}-${Date.now()}.gpx`;
+                const { error: uploadErr } = await sb.storage.from('tracce-gpx').upload(filePath, gpxFile);
+                if (uploadErr) { showMsg("Errore upload GPX", 'error'); return; }
+                const { data: urlData } = sb.storage.from('tracce-gpx').getPublicUrl(filePath);
+                gpxUrl = urlData.publicUrl;
+            }
+
+            if (type === 'uscita') {
+                const { error } = await sb.from('uscite').insert({ titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl });
+                if (error) showMsg("Errore salvataggio", 'error');
+                else showMsg("Uscita creata!");
+            } else {
+                const { error } = await sb.from('gare').insert({ titolo, data_gara: data, luogo: extra });
+                if (error) showMsg("Errore salvataggio", 'error');
+                else showMsg("Gara creata!");
+            }
+            
+            closeModal();
+            loadData(type === 'uscita' ? 'uscite' : 'gare');
+        });
+
+        // AVVIO
+        checkUser();
     </script>
 </body>
 </html>
