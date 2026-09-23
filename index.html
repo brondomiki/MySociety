@@ -87,7 +87,18 @@
         const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
         // -------------------------------------------------------------
 
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // URL del tuo sito: serve per i link di conferma email di Supabase.
+        // Metti qui l'indirizzo esatto da cui apri il portale (es. https://iltuosito.vercel.app)
+        // e aggiungilo anche in Supabase → Authentication → URL Configuration → Redirect URLs.
+        const SITE_URL = window.location.origin + window.location.pathname;
+
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                flowType: 'pkce',                        // richiesto dal link "Confirm email" di Supabase
+                detectSessionInUrl: true,                // cattura il token dal link di conferma
+                redirectTo: SITE_URL                     // dopo la conferma torna qui
+            }
+        });
         let currentUser = null;
         let isAdmin = false;
         let signUpPendingUser = null; // utente appena registrato in attesa di conferma email
@@ -108,6 +119,13 @@
 
         // --- AUTENTICAZIONE ---
         async function checkUser() {
+            // Se nel link è presente un token di conferma email, lo scambiamo subito
+            if (window.location.hash.includes('access_token') || window.location.hash.includes('code=')) {
+                try { await sb.sessionFromUrl(window.location.href); } catch (e) { console.warn(e); }
+                // puliamo l'URL dal token, così ricaricando non dà errori
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+                showMsg('Email confermata! Ora puoi accedere. 🎉');
+            }
             const { data: { session } } = await sb.auth.getSession();
             currentUser = session?.user;
             renderAuthUI();
