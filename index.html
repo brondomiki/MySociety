@@ -58,6 +58,10 @@
                     <i class="fa-solid fa-calendar-days"></i>
                     <span>Uscite</span>
                 </button>
+                <button onclick="switchTab('gare')" id="nav-gare" class="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white">
+                    <i class="fa-solid fa-trophy"></i>
+                    <span>Gare</span>
+                </button>
                 <button onclick="switchTab('chat')" id="nav-chat" class="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center space-x-2 text-slate-300 hover:bg-slate-800 hover:text-white">
                     <i class="fa-solid fa-comments"></i>
                     <span>Chat Live</span>
@@ -99,7 +103,24 @@
             </div>
         </section>
 
-        <!-- ================= TAB 2: CHAT COLLETTIVA ================= -->
+        <!-- ================= TAB 2: GARE IN PROGRAMMA ================= -->
+        <section id="tab-gare" class="hidden space-y-6">
+            <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 backdrop-blur-sm">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                        <i class="fa-solid fa-trophy text-brand-400"></i> Gare in Programma
+                    </h2>
+                    <p class="text-sm text-slate-400 mt-1">Calendario delle competizioni ciclistiche. Iscriviti e preparati con la squadra.</p>
+                </div>
+            </div>
+
+            <!-- Races Grid -->
+            <div id="races-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Dynamic cards injected via JS -->
+            </div>
+        </section>
+
+        <!-- ================= TAB 3: CHAT COLLETTIVA ================= -->
         <section id="tab-chat" class="hidden space-y-4 h-[calc(100vh-12rem)] flex flex-col">
             <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 backdrop-blur-sm flex items-center justify-between">
                 <div>
@@ -307,7 +328,45 @@
             { id: 3, author: 'Elena Gialli', text: 'Ricordo a tutti di portare il kit antiforatura e la borraccia piena!', time: '10:05' }
         ];
 
+        // Initial Mock Races
+        const defaultRaces = [
+            {
+                id: 'race-1',
+                title: 'Gran Fondo Città di Bergamo',
+                date: '2026-04-19',
+                location: 'Bergamo - Piazza della Libertà',
+                distance: 142,
+                elevation: 2100,
+                type: 'Gran Fondo',
+                registrationLink: '#',
+                notes: 'Percorso completo con cronoscalata finale. Iscrizioni aperte fino al 10 aprile.'
+            },
+            {
+                id: 'race-2',
+                title: 'Medio Fondo Val d\'Arno',
+                date: '2026-05-03',
+                location: 'San Giovanni Valdarno',
+                distance: 85,
+                elevation: 1200,
+                type: 'Medio Fondo',
+                registrationLink: '#',
+                notes: 'Gara adatta a tutti. Ritrovo dalle ore 7:00, partenza alle 8:30.'
+            },
+            {
+                id: 'race-3',
+                title: 'Cronoscalata Monte Zoncolan',
+                date: '2026-06-15',
+                location: 'Ovaro (UD)',
+                distance: 13.2,
+                elevation: 1650,
+                type: 'Cronoscalata',
+                registrationLink: '#',
+                notes: 'Salita leggendaria con pendenze massime del 22%. Per ciclisti esperti.'
+            }
+        ];
+
         let rides = JSON.parse(localStorage.getItem('asd_rides')) || defaultRides;
+        let races = JSON.parse(localStorage.getItem('asd_races')) || defaultRaces;
         let messages = JSON.parse(localStorage.getItem('asd_messages')) || defaultMessages;
         let currentFilter = 'tutti';
         let chatAuthorName = localStorage.getItem('asd_chat_author') || 'Ciclista ASD';
@@ -315,6 +374,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('chat-author').value = chatAuthorName;
             renderRides();
+            renderRaces();
             renderAdminTable();
             renderChatMessages();
 
@@ -326,7 +386,7 @@
 
         // Tab Switching Logic
         function switchTab(tabId) {
-            ['uscite', 'chat', 'admin'].forEach(id => {
+            ['uscite', 'gare', 'chat', 'admin'].forEach(id => {
                 const section = document.getElementById(`tab-${id}`);
                 const btn = document.getElementById(`nav-${id}`);
                 if (id === tabId) {
@@ -508,8 +568,75 @@
             rides = [...defaultRides];
             localStorage.setItem('asd_rides', JSON.stringify(rides));
             renderRides();
+            renderRaces();
             renderAdminTable();
             showModal('Ripristinato', 'Il calendario è stato reimpostato ai dati predefiniti.', 'fa-solid fa-rotate-right');
+        }
+
+        // Render Races Grid
+        function renderRaces() {
+            const grid = document.getElementById('races-grid');
+            grid.innerHTML = '';
+
+            if (races.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-12 bg-slate-900/30 rounded-2xl border border-slate-800/60">
+                        <i class="fa-solid fa-trophy text-3xl text-slate-500 mb-3"></i>
+                        <p class="text-slate-400 text-sm">Nessuna gara in programma.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            races.forEach(race => {
+                const typeColor = race.type === 'Gran Fondo' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' :
+                                  race.type === 'Medio Fondo' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
+                                  'bg-orange-500/10 text-orange-400 border-orange-500/30';
+
+                const formattedDate = new Date(race.date).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-900/70 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg relative group overflow-hidden";
+                card.innerHTML = `
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-brand-500/5 rounded-full blur-2xl group-hover:bg-brand-500/10 transition"></div>
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs px-2.5 py-1 rounded-full border font-semibold uppercase tracking-wider ${typeColor}">
+                                ${race.type}
+                            </span>
+                        </div>
+                        <h3 class="text-lg font-bold text-white mb-1 group-hover:text-brand-400 transition">${race.title}</h3>
+                        <p class="text-xs text-brand-300 font-medium capitalize mb-3 flex items-center gap-1.5">
+                            <i class="fa-regular fa-calendar"></i> ${formattedDate}
+                        </p>
+                        
+                        <div class="grid grid-cols-2 gap-2 my-4 bg-slate-950/50 p-3 rounded-xl border border-slate-800/80">
+                            <div>
+                                <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Distanza</span>
+                                <span class="text-sm font-bold text-white"><i class="fa-solid fa-road text-brand-400 mr-1"></i> ${race.distance} km</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Dislivello</span>
+                                <span class="text-sm font-bold text-white"><i class="fa-solid fa-mountain text-brand-400 mr-1"></i> +${race.elevation} m</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 text-xs text-slate-300 mb-4">
+                            <p class="flex items-start gap-2">
+                                <i class="fa-solid fa-location-dot text-brand-400 mt-0.5"></i>
+                                <span>${race.location}</span>
+                            </p>
+                            ${race.notes ? `<p class="text-slate-400 italic line-clamp-2">${race.notes}</p>` : ''}
+                        </div>
+                    </div>
+
+                    <a href="${race.registrationLink}" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg shadow-brand-900/30 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-ticket"></i>
+                        <span>Iscriviti alla Gara</span>
+                    </a>
+                `;
+                grid.appendChild(card);
+            });
         }
 
         // Render Admin Table
