@@ -37,8 +37,13 @@ create table if not exists public.uscite (
   titolo text not null,
   data_uscita date,
   descrizione text,
-  gpx_url text
+  gpx_url text,
+  distanza_km numeric(6,1),   -- distanza in km
+  dislivello_m integer        -- dislivello positivo in metri
 );
+-- Aggiunge le colonne se la tabella esisteva già senza:
+alter table public.uscite add column if not exists distanza_km numeric(6,1);
+alter table public.uscite add column if not exists dislivello_m integer;
 alter table public.uscite enable row level security;
 
 drop policy if exists "read uscite" on public.uscite;
@@ -53,8 +58,13 @@ create table if not exists public.gare (
   id bigint generated always as identity primary key,
   titolo text not null,
   data_gara date,
-  luogo text
+  luogo text,
+  distanza_km numeric(6,1),   -- distanza in km
+  dislivello_m integer        -- dislivello positivo in metri
 );
+-- Aggiunge le colonne se la tabella esisteva già senza:
+alter table public.gare add column if not exists distanza_km numeric(6,1);
+alter table public.gare add column if not exists dislivello_m integer;
 alter table public.gare enable row level security;
 
 drop policy if exists "read gare" on public.gare;
