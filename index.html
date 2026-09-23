@@ -70,6 +70,11 @@
                 <input type="text" id="f-titolo" placeholder="✨ Titolo" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
                 <input type="date" id="f-data" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
                 <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <div id="gpx-input-area" class="hidden">
+                    <label class="block text-sm font-semibold mb-1">📍 Traccia GPX:</label>
+                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border-2 border-dashed border-orange-200 rounded-xl">
+                    <p id="gpx-stats" class="hidden mt-2 text-sm font-bold text-emerald-600 bg-emerald-50 rounded-xl px-3 py-2"></p>
+                </div>
                 <div class="flex gap-2">
                     <div class="relative flex-1">
                         <input type="number" id="f-distanza" step="0.1" min="0" placeholder="Distanza (es. 45,5)" class="w-full p-3 pr-10 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
@@ -80,10 +85,7 @@
                         <span class="absolute right-3 top-3.5 text-xs font-bold text-gray-400">m</span>
                     </div>
                 </div>
-                <div id="gpx-input-area" class="hidden">
-                    <label class="block text-sm font-semibold mb-1">📍 Traccia GPX (opzionale):</label>
-                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border-2 border-dashed border-orange-200 rounded-xl">
-                </div>
+                <p id="gpx-auto-note" class="hidden text-xs text-gray-500 -mt-2">🤖 Valori calcolati dal GPX — puoi comunque modificarli a mano.</p>
                 <div class="flex gap-2 pt-2">
                     <button type="submit" class="btn-friendly bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600">💾 Salva</button>
                     <button type="button" onclick="closeModal()" class="btn-friendly bg-gray-100 text-gray-600 px-5 py-2 rounded-full font-bold hover:bg-gray-200">Annulla</button>
@@ -468,6 +470,87 @@
             else { showMsg("Iscrizione annullata. Ti aspettiamo alla prossima! 👋"); loadData('gare'); }
         }
 
+// --- CALCOLO DISTANZA/DISLIVELLO DAL GPX ---
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // raggi terrestre in metri
+            const toRad = d => d * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+            return 2 * R * Math.asin(Math.sqrt(a));
+        }
+
+        // Estrae i punti (lat, lon, ele) da una stringa GPX, senza dipendere dal namespace
+        function parseGpxPoints(text) {
+            const doc = new DOMParser().parseFromString(text, 'application/xml');
+            if (doc.querySelector('parsererror')) throw new Error('File GPX non valido o corrotto.');
+            const pts = [];
+            doc.getElementsByTagName('*').forEach(node => {
+                const tag = node.tagName.toLowerCase();
+                if (tag === 'trkpt' || tag === 'rtept' || tag === 'wpt') {
+                    const lat = parseFloat(node.getAttribute('lat'));
+                    const lon = parseFloat(node.getAttribute('lon'));
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        let ele = null;
+                        for (const child of node.children) {
+                            if (child.tagName.toLowerCase() === 'ele') {
+                                const v = parseFloat(child.textContent);
+                                if (!isNaN(v)) ele = v;
+                            }
+                        }
+                        pts.push({ lat, lon, ele });
+                    }
+                }
+            });
+            if (pts.length < 2) throw new Error('Il GPX non contiene abbastanza punti per il calcolo.');
+            return pts;
+        }
+
+        // Distanza totale (m) e dislivello positivo cumulativo (m)
+        function calcGpxStats(pts) {
+            let dist = 0, gain = 0;
+            for (let i = 1; i < pts.length; i++) {
+                dist += haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
+                const prev = pts[i-1].ele, cur = pts[i].ele;
+                if (prev != null && cur != null) {
+                    const d = cur - prev;
+                    if (d > 0.5) gain += d; // filtro micro-rumore GPS
+                }
+            }
+            return { distanceM: dist, elevationGainM: gain };
+        }
+
+        async function analyzeGpxFile(file) {
+            const text = await file.text();
+            const pts = parseGpxPoints(text);
+            const stats = calcGpxStats(pts);
+            const hasEle = pts.some(p => p.ele != null);
+            document.getElementById('f-distanza').value = (stats.distanceM / 1000).toFixed(1);
+            if (hasEle) {
+                document.getElementById('f-dislivello').value = Math.round(stats.elevationGainM);
+            } else {
+                document.getElementById('f-dislivello').value = '';
+                showMsg('Il GPX non contiene dati di quota (ele): ho calcolato la distanza, inserisci il dislivello a mano. 🙂', 'error');
+            }
+            const statsEl = document.getElementById('gpx-stats');
+            statsEl.textContent = `🤖 Calcolato dal GPX: 📏 ${(stats.distanceM/1000).toLocaleString('it-IT', {maximumFractionDigits:1})} km` +
+                                  (hasEle ? ` · ⛰️ ${Math.round(stats.elevationGainM).toLocaleString('it-IT')} m dislivello` : '');
+            statsEl.classList.remove('hidden');
+            document.getElementById('gpx-auto-note').classList.remove('hidden');
+        }
+
+        document.getElementById('f-gpx').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const statsEl = document.getElementById('gpx-stats');
+            statsEl.classList.add('hidden');
+            document.getElementById('gpx-auto-note').classList.add('hidden');
+            if (!file) return;
+            analyzeGpxFile(file).catch(err => {
+                console.error('gpx parse:', err);
+                showMsg('Ops, non sono riuscito a leggere il GPX: ' + err.message, 'error');
+            });
+        });
+
 // --- ADMIN MODALE & UPLOAD ---
         function openModal(type, item = null) {
             document.getElementById('admin-modal').classList.remove('hidden');
@@ -477,6 +560,8 @@
             document.getElementById('form-type').value = type;
             document.getElementById('form-id').value = item ? item.id : '';
             document.getElementById('gpx-input-area').className = type === 'uscita' ? '' : 'hidden';
+            document.getElementById('gpx-stats').classList.add('hidden');
+            document.getElementById('gpx-auto-note').classList.add('hidden');
             document.getElementById('f-extra').placeholder = type === 'uscita' ? 'Descrizione percorso' : 'Luogo della gara';
             if (item) {
                 document.getElementById('f-titolo').value = item.titolo || '';
