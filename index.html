@@ -115,8 +115,11 @@
 
         // --- AUTENTICAZIONE ---
         async function checkUser() {
+            // 0) Pulizia/recupero da token presenti nell'URL (link di conferma, errori vecchi, ecc.)
+            await salvageSessionFromUrl();
+
             // 1) Se nel link è presente un token/code di conferma email, completiamo qui lo scambio.
-            if (window.location.hash || window.location.search.includes('code=')) {
+            if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
                 try {
                     const { data, error } = await sb.sessionFromUrl(window.location.href);
                     if (error) console.warn('sessionFromUrl:', error.message);
@@ -143,6 +146,31 @@
             renderAuthUI();
             if (currentUser) await checkRole();
             loadData();
+        }
+
+        // Recupera la sessione ANCHE da un hash deprecato (es. ?error_code=...#access_token=...)
+        // e pulisce l'URL: evita che un token vecchio blocchi il login successivo ("not logged in").
+        function salvageSessionFromUrl() {
+            return new Promise((resolve) => {
+                try {
+                    const h = window.location.hash || '';
+                    if (h.includes('access_token') && !h.includes('error')) {
+                        const p = new URLSearchParams(h.slice(1));
+                        const at = p.get('access_token'), rt = p.get('refresh_token');
+                        if (at) {
+                            const user = JSON.parse(localStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token') || 'null');
+                            if (user?.currentSession?.access_token === at) { resolve(true); return; } // già salvata dal client
+                            sb.auth.setSession({ access_token: at, refresh_token: rt }).then(() => resolve(true));
+                            history.replaceState(null, '', window.location.pathname + window.location.search);
+                            return;
+                        }
+                    }
+                    if (window.location.search.includes('error=')) {
+                        history.replaceState(null, '', window.location.pathname); // rimuove errori vecchi dall'URL
+                    }
+                } catch (e) { console.warn(e); }
+                resolve(false);
+            });
         }
 
         async function checkRole() {
@@ -219,6 +247,18 @@
         }
 
         async function login() {
+            // Se c'è già una sessione valida, non serve reinserire le credenziali:
+            // (capitava di ritrovarsi "non loggati" per colpa di un token vecchio nell'URL)
+            const { data: { session } } = await sb.auth.getSession();
+            if (session?.user) {
+                currentUser = session.user;
+                renderAuthUI();
+                await checkRole();
+                loadData();
+                showMsg('Bentornato/a! La tua sessione era ancora attiva. 😊');
+                return;
+            }
+
             const nome = prompt("Il tuo nome (solo la prima volta):");
             const email = prompt("La tua email:");
             const password = prompt("Password (almeno 6 caratteri):");
@@ -227,7 +267,7 @@
             // Prima prova a registrare l'utente (se già esiste, Supabase lo dice e facciamo login)
             const { data: signUpData, error: regError } = await sb.auth.signUp({
                 email, password,
-                options: { data: { nome: nome || 'Utente' } }
+                options: { data: { nome: nome || 'Utente' }, emailRedirectTo: SITE_URL }
             });
 
             if (regError) {
@@ -251,8 +291,15 @@
                 // Serve confermare l'email: proviamo comunque il login (forse è già confermata)
                 const { error } = await sb.auth.signInWithPassword({ email, password });
                 if (error) {
-                    signUpPendingUser = { email };
-                    showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬", 'error');
+                    const em = (error.message || '').toLowerCase();
+                    if (em.includes('confirm')) {
+                        signUpPendingUser = { email };
+                        showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬", 'error');
+                    } else if (em.includes('invalid login')) {
+                        showMsg("Email o password non corretti: riprova. 🔁", 'error');
+                    } else {
+                        showMsg(error.message, 'error');
+                    }
                     renderAuthUI();
                 } else await checkUser();
             }
@@ -407,12 +454,12 @@
 
             if (type === 'uscita') {
                 const { error } = await sb.from('uscite').insert({ titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl });
-                if (error) showMsg("Ops! Non siamo riusciti a salvare l'uscita.", 'error');
-                else showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
+                if (error) { console.error('insert uscite:', error); showMsg("Ops! Non siamo riusciti a salvare l'uscita (" + error.message + ").", 'error'); return; }
+                showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
             } else {
                 const { error } = await sb.from('gare').insert({ titolo, data_gara: data, luogo: extra });
-                if (error) showMsg("Ops! Non siamo riusciti a salvare la gara.", 'error');
-                else showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
+                if (error) { console.error('insert gare:', error); showMsg("Ops! Non siamo riusciti a salvare la gara (" + error.message + ").", 'error'); return; }
+                showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
             }
             
             closeModal();
