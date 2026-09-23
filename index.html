@@ -94,19 +94,15 @@
 
         const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: {
-                flowType: 'pkce',                        // richiesto dal link "Confirm email" di Supabase
-                detectSessionInUrl: true,                // cattura il token dal link di conferma
-                redirectTo: SITE_URL                     // dopo la conferma torna qui
+                flowType: 'implicit',                    // login classico con token nell'URL: compatibile con i link di conferma/recovery
+                detectSessionInUrl: true,                // cattura il token dal link e crea la sessione automaticamente
+                redirectTo: SITE_URL                     // dopo la conferma torna qui (deve essere tra i Redirect URLs in Supabase)
             }
         });
         let currentUser = null;
         let isAdmin = false;
+        let profileMissing = false; // true se la tabella profiles non ha una riga per l'utente loggato
         let signUpPendingUser = null; // utente appena registrato in attesa di conferma email
-
-        function currentSession() {
-            try { return JSON.parse(sessionStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token') || '{}'); }
-            catch (e) { return null; }
-        }
 
         // Gestione UI e Messaggi
         const showMsg = (text, type = 'success') => {
@@ -119,23 +115,55 @@
 
         // --- AUTENTICAZIONE ---
         async function checkUser() {
-            // Se nel link è presente un token di conferma email, lo scambiamo subito
-            if (window.location.hash.includes('access_token') || window.location.hash.includes('code=')) {
-                try { await sb.sessionFromUrl(window.location.href); } catch (e) { console.warn(e); }
+            // 1) Se nel link è presente un token/code di conferma email, completiamo qui lo scambio.
+            if (window.location.hash || window.location.search.includes('code=')) {
+                try {
+                    const { data, error } = await sb.sessionFromUrl(window.location.href);
+                    if (error) console.warn('sessionFromUrl:', error.message);
+                    else if (data.session) showMsg('Email confermata! Benvenuto/a nella community 🎉');
+                    else showMsg('Link di conferma elaborato, ora puoi accedere. ✅');
+                } catch (e) { console.warn(e); }
                 // puliamo l'URL dal token, così ricaricando non dà errori
                 history.replaceState(null, '', window.location.pathname + window.location.search);
-                showMsg('Email confermata! Ora puoi accedere. 🎉');
             }
+
+            // 2) Recovery password: se il link conteneva type=recovery, impostiamo subito una nuova password
+            if (window.location.hash.includes('type=recovery')) {
+                const nuova = prompt('Password recuperata! Scegli una nuova password (almeno 6 caratteri):');
+                if (nuova && nuova.length >= 6) {
+                    const { error } = await sb.auth.updateUser({ password: nuova });
+                    if (error) showMsg(error.message, 'error');
+                    else showMsg('Password aggiornata! Ora sei dentro. 🔓');
+                }
+            }
+
+            // 3) Ricarichiamo la sessione e aggiorniamo la UI
             const { data: { session } } = await sb.auth.getSession();
-            currentUser = session?.user;
+            currentUser = session?.user ?? null;
             renderAuthUI();
             if (currentUser) await checkRole();
             loadData();
         }
 
         async function checkRole() {
-            const { data, error } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).single();
-            if (error) console.warn('Errore lettura profilo:', error.message);
+            profileMissing = false;
+            const { data, error } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).maybeSingle();
+            if (error) {
+                console.warn('Errore lettura profilo:', error.message);
+                showMsg('Attenzione: errore leggendo il tuo profilo (' + error.message + ').', 'error');
+            } else if (!data) {
+                // L'utente esiste in Auth ma non ha la riga in profiles (trigger mancante o utente creato prima dello script SQL):
+                // la creiamo al volo, altrimenti non potrà mai diventare admin / iscriversi.
+                profileMissing = true;
+                const { error: insErr } = await sb.from('profiles').insert({ id: currentUser.id, nome: currentUser.user_metadata?.nome || 'Atleta', is_admin: false });
+                if (insErr) {
+                    console.warn('Auto-creazione profilo fallita:', insErr.message);
+                    showMsg('Il tuo profilo non è ancora completo: chiedi a un admin di crearlo (tabella "profiles").', 'error');
+                } else {
+                    profileMissing = false;
+                    showMsg('Profilo creato! Ora sei dei nostri. 🚴');
+                }
+            }
             isAdmin = data?.is_admin || false;
             renderAuthUI();
         }
@@ -169,7 +197,24 @@
                     adminBtns.classList.remove('hidden');
                 } else {
                     adminBtns.classList.add('hidden');
+                    // Spieghiamo SUBITO perché non vede i pulsanti admin, così non sembra "non succeda nulla"
+                    const hint = document.getElementById('admin-hint');
+                    if (!hint) {
+                        const div = document.createElement('div');
+                        div.id = 'admin-hint';
+                        div.className = 'mb-4 p-4 rounded-xl bg-amber-100 text-amber-900 text-sm font-semibold card-anim';
+                        div.innerHTML = '✅ Sei loggato, tutto regolare! Ma al tuo account <b>' + (currentUser.email || '') +
+                            '</b> non risulta il ruolo <b>admin</b>, quindi non vedi i pulsanti ➕ Uscita / ➕ Gara.<br>' +
+                            'Per ottenerlo: dashboard Supabase → <b>SQL Editor</b> ed esegui:<br>' +
+                            '<code class="bg-white px-2 py-1 rounded text-xs block mt-1 break-all">update public.profiles set is_admin = true where id = \'' + currentUser.id + '\';</code>' +
+                            'Poi ricarica questa pagina e vedrai i pulsanti per aggiungere contenuti. 🚀';
+                        document.querySelector('main').prepend(div);
+                    }
                 }
+            }
+            if (currentUser && !profileMissing) {
+                const h = document.getElementById('admin-hint');
+                if (h && isAdmin) h.remove();
             }
         }
 
