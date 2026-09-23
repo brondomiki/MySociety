@@ -83,7 +83,7 @@
 
     <script>
         // --- CONFIGURAZIONE: INSERISCI QUI I TUOI DATI DI SUPABASE ---
-        const SUPABASE_URL = 'https://wrcvolbhjpzyraooldmt.supabase.co/rest/v1/';
+        const SUPABASE_URL = 'https://wrcvolbhjpzyraooldmt.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
         // -------------------------------------------------------------
 
@@ -141,17 +141,34 @@
             const password = prompt("Password (almeno 6 caratteri):");
             if (!email || !password) return;
 
-            const { data, error } = await sb.auth.signInWithPassword({ email, password });
-            if (error) {
-                // Se non esiste, proviamo a registrarlo
-                const { error: regError } = await sb.auth.signUp({ 
-                    email, password, 
-                    options: { data: { nome: nome || 'Utente' } } 
-                });
-                if (regError) showMsg(regError.message, 'error');
-                else showMsg("Registrato! Controlla email per conferma o riprova il login.");
-            } else {
+            // Prima prova a registrare l'utente (se già esiste, Supabase lo dice e facciamo login)
+            const { data: signUpData, error: regError } = await sb.auth.signUp({
+                email, password,
+                options: { data: { nome: nome || 'Utente' } }
+            });
+
+            if (regError) {
+                const msg = (regError.message || '').toLowerCase();
+                if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('confirmed')) {
+                    // L'utente esiste già: normale login
+                    const { error } = await sb.auth.signInWithPassword({ email, password });
+                    if (error) showMsg(error.message, 'error');
+                    else await checkUser();
+                } else {
+                    showMsg(regError.message, 'error');
+                }
+                return;
+            }
+
+            if (signUpData.session) {
+                // Registrazione completata e sessione attiva (conferma email disabilitata)
+                showMsg("Evviva! Account creato, benvenuto/a nella community! 🚴");
                 await checkUser();
+            } else {
+                // Serve confermare l'email: proviamo comunque il login (forse è già confermata)
+                const { error } = await sb.auth.signInWithPassword({ email, password });
+                if (error) showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬");
+                else await checkUser();
             }
         }
 
