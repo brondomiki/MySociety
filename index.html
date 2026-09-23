@@ -90,6 +90,12 @@
         const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         let currentUser = null;
         let isAdmin = false;
+        let signUpPendingUser = null; // utente appena registrato in attesa di conferma email
+
+        function currentSession() {
+            try { return JSON.parse(sessionStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token') || '{}'); }
+            catch (e) { return null; }
+        }
 
         // Gestione UI e Messaggi
         const showMsg = (text, type = 'success') => {
@@ -110,7 +116,8 @@
         }
 
         async function checkRole() {
-            const { data } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).single();
+            const { data, error } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).single();
+            if (error) console.warn('Errore lettura profilo:', error.message);
             isAdmin = data?.is_admin || false;
             renderAuthUI();
         }
@@ -119,8 +126,21 @@
             const area = document.getElementById('auth-area');
             const adminBtns = document.getElementById('admin-btns');
             if (!currentUser) {
+                // Se l'utente si è appena registrato ma deve confermare l'email: avvisalo con chiarezza
+                const pendingUser = signUpPendingUser;
                 area.innerHTML = `<button onclick="login()" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Accedi</button>`;
                 adminBtns.classList.add('hidden');
+                if (pendingUser) {
+                    const box = document.getElementById('confirm-box');
+                    if (!box) {
+                        const div = document.createElement('div');
+                        div.id = 'confirm-box';
+                        div.className = 'mb-4 p-4 rounded-xl bg-sky-100 text-sky-900 text-sm font-semibold card-anim';
+                        div.innerHTML = '📬 <b>Ultimo passo!</b> Account creato per <b>' + (pendingUser.email || '') + '</b>.<br>' +
+                            'Controlla la tua casella di posta e clicca il link di conferma che ti ha inviato Supabase, poi ricarica la pagina e accedi. 🚴';
+                        document.querySelector('main').prepend(div);
+                    }
+                }
             } else {
                 area.innerHTML = `<span class="text-sm md:text-base font-semibold">Ciao ${currentUser.user_metadata?.nome || 'Atleta'}! 👋</span> <button onclick="logout()" class="btn-friendly bg-white/20 px-3 py-1 rounded-full text-sm hover:bg-white/30">Esci</button>`;
                 if (isAdmin) {
@@ -167,8 +187,27 @@
             } else {
                 // Serve confermare l'email: proviamo comunque il login (forse è già confermata)
                 const { error } = await sb.auth.signInWithPassword({ email, password });
-                if (error) showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬");
-                else await checkUser();
+                if (error) {
+                    signUpPendingUser = { email };
+                    showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬", 'error');
+                    renderAuthUI();
+                } else await checkUser();
+            }
+        }
+
+        // --- DIAGNOSTICA: segnala in alto eventuali errori Supabase (es. tabelle mancanti) ---
+        async function checkSchema() {
+            const problems = [];
+            for (const t of ['uscite', 'gare', 'profiles']) {
+                const { error } = await sb.from(t).select('*').limit(1);
+                if (error && (error.code === '42P01' || error.code === 'PGRST205')) problems.push(t);
+            }
+            if (problems.length) {
+                const box = document.createElement('div');
+                box.className = 'mb-4 p-4 rounded-xl bg-yellow-100 text-yellow-900 text-sm font-semibold card-anim';
+                box.innerHTML = '⚠️ Nel database Supabase mancano ancora le tabelle: <b>' + problems.join(', ') + '</b>.<br>' +
+                    'Apri la dashboard Supabase → <b>SQL Editor</b> ed esegui lo script di creazione (setup.sql del progetto), poi ricarica questa pagina.';
+                document.querySelector('main').prepend(box);
             }
         }
 
@@ -319,6 +358,7 @@
 
         // AVVIO
         checkUser();
+        checkSchema();
     </script>
 </body>
 </html>
