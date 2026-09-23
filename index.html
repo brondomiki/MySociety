@@ -66,6 +66,7 @@
             <h3 id="modal-title" class="text-xl font-extrabold mb-4 text-orange-600"></h3>
             <form id="admin-form" class="space-y-4">
                 <input type="hidden" id="form-type">
+                <input type="hidden" id="form-id">
                 <input type="text" id="f-titolo" placeholder="✨ Titolo" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
                 <input type="date" id="f-data" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
                 <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
@@ -354,16 +355,30 @@
 
             if (tab === 'uscite') {
                 const { data } = await sb.from('uscite').select('*').order('data_uscita', { ascending: false });
+                cacheUscite = data || [];
                 area.innerHTML = '<div class="space-y-4" id="list-uscite"></div>';
                 if (data && data.length > 0) data.forEach(renderUscita);
                 else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🚴‍♂️💨</p><p class="text-gray-500 font-semibold">Ancora nessuna uscita programmata!</p><p class="text-sm text-gray-400 mt-1">Ritorna presto a trovarci, ne vedremo delle belle. 😉</p></div>';
             } else {
                 const { data } = await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara', { ascending: false });
+                cacheGare = data || [];
                 area.innerHTML = '<div class="space-y-4" id="list-gare"></div>';
                 if (data && data.length > 0) data.forEach(renderGara);
                 else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🏁😴</p><p class="text-gray-500 font-semibold">Nessuna gara in programma al momento.</p><p class="text-sm text-gray-400 mt-1">Ma non temere: ci stiamo allenando per te! 💪</p></div>';
             }
         }
+
+        // Pulsanti admin (modifica/elimina) mostrati solo se isAdmin
+        function adminActions(type, id) {
+            if (!isAdmin) return '';
+            return `<div class="flex gap-2 mt-3">
+                <button onclick="editItem('${type}', ${id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
+                <button onclick="deleteItem('${type}', ${id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>
+            </div>`;
+        }
+
+        // Cache dei dati caricati, per riaprire il modale già compilato in modifica
+        let cacheUscite = [], cacheGare = [];
 
         // --- RENDERING ---
         function renderUscita(item) {
@@ -372,6 +387,7 @@
             div.innerHTML = `
                 <h3 class="font-extrabold text-lg text-gray-800">🚴 ${item.titolo}</h3>
                 <p class="text-sm text-gray-500 mt-1">📅 ${item.data_uscita} ${item.descrizione ? '| ' + item.descrizione : ''}</p>
+                ${adminActions('uscita', item.id)}
                 <div id="map-${item.id}" class="map-container"></div>
             `;
             document.getElementById('list-uscite').appendChild(div);
@@ -408,6 +424,7 @@
                         : `<button onclick="iscriviti(${item.id})" class="btn-friendly bg-violet-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">💪 Partecipa!</button>`
                     ) : ''}
                 </div>
+                ${adminActions('gara', item.id)}
                 <div class="mt-4">
                     <h4 class="font-bold text-sm mb-2 text-gray-600">Chi partecipa? (${iscritti.length}) 🎟️</h4>
                     <div class="flex flex-wrap gap-2">
@@ -431,23 +448,49 @@
             else { showMsg("Iscrizione annullata. Ti aspettiamo alla prossima! 👋"); loadData('gare'); }
         }
 
-        // --- ADMIN MODALE & UPLOAD ---
-        function openModal(type) {
+// --- ADMIN MODALE & UPLOAD ---
+        function openModal(type, item = null) {
             document.getElementById('admin-modal').classList.remove('hidden');
-            document.getElementById('modal-title').textContent = type === 'uscita' ? 'Nuova Uscita' : 'Nuova Gara';
+            document.getElementById('modal-title').textContent = item
+                ? (type === 'uscita' ? '✏️ Modifica Uscita' : '✏️ Modifica Gara')
+                : (type === 'uscita' ? 'Nuova Uscita' : 'Nuova Gara');
             document.getElementById('form-type').value = type;
+            document.getElementById('form-id').value = item ? item.id : '';
             document.getElementById('gpx-input-area').className = type === 'uscita' ? '' : 'hidden';
             document.getElementById('f-extra').placeholder = type === 'uscita' ? 'Descrizione percorso' : 'Luogo della gara';
+            if (item) {
+                document.getElementById('f-titolo').value = item.titolo || '';
+                document.getElementById('f-data').value = (type === 'uscita' ? item.data_uscita : item.data_gara) || '';
+                document.getElementById('f-extra').value = (type === 'uscita' ? item.descrizione : item.luogo) || '';
+            }
+        }
+
+        function editItem(type, id) {
+            const list = type === 'uscita' ? cacheUscite : cacheGare;
+            const item = list.find(x => String(x.id) === String(id));
+            if (!item) { showMsg('Mi sfugge questo elemento... ricarica la pagina e riprova. 🔄', 'error'); return; }
+            openModal(type, item);
+        }
+
+        async function deleteItem(type, id) {
+            if (!confirm('Sicuri di voler eliminare questo evento? 🗑️')) return;
+            const table = type === 'uscita' ? 'uscite' : 'gare';
+            const { error } = await sb.from(table).delete().eq('id', id);
+            if (error) { console.error('delete:', error); showMsg('Ops! Non sono riuscito a eliminare (' + error.message + ')', 'error'); return; }
+            showMsg('Eliminato! Alla prossima! 👋');
+            loadData(table);
         }
 
         function closeModal() {
             document.getElementById('admin-modal').classList.add('hidden');
             document.getElementById('admin-form').reset();
+            document.getElementById('form-id').value = '';
         }
 
         document.getElementById('admin-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const type = document.getElementById('form-type').value;
+            const editId = document.getElementById('form-id').value;
             const titolo = document.getElementById('f-titolo').value;
             const data = document.getElementById('f-data').value;
             const extra = document.getElementById('f-extra').value;
@@ -461,18 +504,28 @@
                 if (uploadErr) { showMsg("Errore upload GPX", 'error'); return; }
                 const { data: urlData } = sb.storage.from('tracce-gpx').getPublicUrl(filePath);
                 gpxUrl = urlData.publicUrl;
+            } else if (type === 'uscita' && editId) {
+                // In modifica: se non carichi un nuovo GPX, mantieni la traccia esistente
+                const old = cacheUscite.find(x => String(x.id) === String(editId));
+                gpxUrl = old ? old.gpx_url : null;
             }
 
             if (type === 'uscita') {
-                const { error } = await sb.from('uscite').insert({ titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl });
-                if (error) { console.error('insert uscite:', error); showMsg("Ops! Non siamo riusciti a salvare l'uscita (" + error.message + ").", 'error'); return; }
-                showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
+                const payload = { titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl };
+                const { error } = editId
+                    ? await sb.from('uscite').update(payload).eq('id', editId)
+                    : await sb.from('uscite').insert(payload);
+                if (error) { console.error('save uscite:', error); showMsg("Ops! Non siamo riusciti a salvare l'uscita (" + error.message + ").", 'error'); return; }
+                showMsg(editId ? 'Uscita aggiornata! Grazie mille! 🙌' : "Uscita pubblicata! Buona pedalata! 🚴💨");
             } else {
-                const { error } = await sb.from('gare').insert({ titolo, data_gara: data, luogo: extra });
-                if (error) { console.error('insert gare:', error); showMsg("Ops! Non siamo riusciti a salvare la gara (" + error.message + ").", 'error'); return; }
-                showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
+                const payload = { titolo, data_gara: data, luogo: extra };
+                const { error } = editId
+                    ? await sb.from('gare').update(payload).eq('id', editId)
+                    : await sb.from('gare').insert(payload);
+                if (error) { console.error('save gare:', error); showMsg("Ops! Non siamo riusciti a salvare la gara (" + error.message + ").", 'error'); return; }
+                showMsg(editId ? 'Gara aggiornata! Tutto pronto per la prossima! 🏁' : "Gara pubblicata! Che vinca il migliore! 🏆");
             }
-            
+
             closeModal();
             loadData(type === 'uscita' ? 'uscite' : 'gare');
         });
