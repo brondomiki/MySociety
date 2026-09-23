@@ -87,9 +87,22 @@
         const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
         // -------------------------------------------------------------
 
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // URL del tuo sito: serve per i link di conferma email di Supabase.
+        // Metti qui l'indirizzo esatto da cui apri il portale (es. https://iltuosito.vercel.app)
+        // e aggiungilo anche in Supabase → Authentication → URL Configuration → Redirect URLs.
+        const SITE_URL = window.location.origin + window.location.pathname;
+
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                flowType: 'implicit',                    // login classico con token nell'URL: compatibile con i link di conferma/recovery
+                detectSessionInUrl: true,                // cattura il token dal link e crea la sessione automaticamente
+                redirectTo: SITE_URL                     // dopo la conferma torna qui (deve essere tra i Redirect URLs in Supabase)
+            }
+        });
         let currentUser = null;
         let isAdmin = false;
+        let profileMissing = false; // true se la tabella profiles non ha una riga per l'utente loggato
+        let signUpPendingUser = null; // utente appena registrato in attesa di conferma email
 
         // Gestione UI e Messaggi
         const showMsg = (text, type = 'success') => {
@@ -102,15 +115,83 @@
 
         // --- AUTENTICAZIONE ---
         async function checkUser() {
+            // 0) Pulizia/recupero da token presenti nell'URL (link di conferma, errori vecchi, ecc.)
+            await salvageSessionFromUrl();
+
+            // 1) Se nel link è presente un token/code di conferma email, completiamo qui lo scambio.
+            if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
+                try {
+                    const { data, error } = await sb.sessionFromUrl(window.location.href);
+                    if (error) console.warn('sessionFromUrl:', error.message);
+                    else if (data.session) showMsg('Email confermata! Benvenuto/a nella community 🎉');
+                    else showMsg('Link di conferma elaborato, ora puoi accedere. ✅');
+                } catch (e) { console.warn(e); }
+                // puliamo l'URL dal token, così ricaricando non dà errori
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+
+            // 2) Recovery password: se il link conteneva type=recovery, impostiamo subito una nuova password
+            if (window.location.hash.includes('type=recovery')) {
+                const nuova = prompt('Password recuperata! Scegli una nuova password (almeno 6 caratteri):');
+                if (nuova && nuova.length >= 6) {
+                    const { error } = await sb.auth.updateUser({ password: nuova });
+                    if (error) showMsg(error.message, 'error');
+                    else showMsg('Password aggiornata! Ora sei dentro. 🔓');
+                }
+            }
+
+            // 3) Ricarichiamo la sessione e aggiorniamo la UI
             const { data: { session } } = await sb.auth.getSession();
-            currentUser = session?.user;
+            currentUser = session?.user ?? null;
             renderAuthUI();
             if (currentUser) await checkRole();
             loadData();
         }
 
+        // Recupera la sessione ANCHE da un hash deprecato (es. ?error_code=...#access_token=...)
+        // e pulisce l'URL: evita che un token vecchio blocchi il login successivo ("not logged in").
+        function salvageSessionFromUrl() {
+            return new Promise((resolve) => {
+                try {
+                    const h = window.location.hash || '';
+                    if (h.includes('access_token') && !h.includes('error')) {
+                        const p = new URLSearchParams(h.slice(1));
+                        const at = p.get('access_token'), rt = p.get('refresh_token');
+                        if (at) {
+                            const user = JSON.parse(localStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token') || 'null');
+                            if (user?.currentSession?.access_token === at) { resolve(true); return; } // già salvata dal client
+                            sb.auth.setSession({ access_token: at, refresh_token: rt }).then(() => resolve(true));
+                            history.replaceState(null, '', window.location.pathname + window.location.search);
+                            return;
+                        }
+                    }
+                    if (window.location.search.includes('error=')) {
+                        history.replaceState(null, '', window.location.pathname); // rimuove errori vecchi dall'URL
+                    }
+                } catch (e) { console.warn(e); }
+                resolve(false);
+            });
+        }
+
         async function checkRole() {
-            const { data } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).single();
+            profileMissing = false;
+            const { data, error } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).maybeSingle();
+            if (error) {
+                console.warn('Errore lettura profilo:', error.message);
+                showMsg('Attenzione: errore leggendo il tuo profilo (' + error.message + ').', 'error');
+            } else if (!data) {
+                // L'utente esiste in Auth ma non ha la riga in profiles (trigger mancante o utente creato prima dello script SQL):
+                // la creiamo al volo, altrimenti non potrà mai diventare admin / iscriversi.
+                profileMissing = true;
+                const { error: insErr } = await sb.from('profiles').insert({ id: currentUser.id, nome: currentUser.user_metadata?.nome || 'Atleta', is_admin: false });
+                if (insErr) {
+                    console.warn('Auto-creazione profilo fallita:', insErr.message);
+                    showMsg('Il tuo profilo non è ancora completo: chiedi a un admin di crearlo (tabella "profiles").', 'error');
+                } else {
+                    profileMissing = false;
+                    showMsg('Profilo creato! Ora sei dei nostri. 🚴');
+                }
+            }
             isAdmin = data?.is_admin || false;
             renderAuthUI();
         }
@@ -119,8 +200,21 @@
             const area = document.getElementById('auth-area');
             const adminBtns = document.getElementById('admin-btns');
             if (!currentUser) {
+                // Se l'utente si è appena registrato ma deve confermare l'email: avvisalo con chiarezza
+                const pendingUser = signUpPendingUser;
                 area.innerHTML = `<button onclick="login()" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Accedi</button>`;
                 adminBtns.classList.add('hidden');
+                if (pendingUser) {
+                    const box = document.getElementById('confirm-box');
+                    if (!box) {
+                        const div = document.createElement('div');
+                        div.id = 'confirm-box';
+                        div.className = 'mb-4 p-4 rounded-xl bg-sky-100 text-sky-900 text-sm font-semibold card-anim';
+                        div.innerHTML = '📬 <b>Ultimo passo!</b> Account creato per <b>' + (pendingUser.email || '') + '</b>.<br>' +
+                            'Controlla la tua casella di posta e clicca il link di conferma che ti ha inviato Supabase, poi ricarica la pagina e accedi. 🚴';
+                        document.querySelector('main').prepend(div);
+                    }
+                }
             } else {
                 area.innerHTML = `<span class="text-sm md:text-base font-semibold">Ciao ${currentUser.user_metadata?.nome || 'Atleta'}! 👋</span> <button onclick="logout()" class="btn-friendly bg-white/20 px-3 py-1 rounded-full text-sm hover:bg-white/30">Esci</button>`;
                 if (isAdmin) {
@@ -131,44 +225,110 @@
                     adminBtns.classList.remove('hidden');
                 } else {
                     adminBtns.classList.add('hidden');
+                    // Spieghiamo SUBITO perché non vede i pulsanti admin, così non sembra "non succeda nulla"
+                    const hint = document.getElementById('admin-hint');
+                    if (!hint) {
+                        const div = document.createElement('div');
+                        div.id = 'admin-hint';
+                        div.className = 'mb-4 p-4 rounded-xl bg-amber-100 text-amber-900 text-sm font-semibold card-anim';
+                        div.innerHTML = '✅ Sei loggato, tutto regolare! Ma al tuo account <b>' + (currentUser.email || '') +
+                            '</b> non risulta il ruolo <b>admin</b>, quindi non vedi i pulsanti ➕ Uscita / ➕ Gara.<br>' +
+                            'Per ottenerlo: dashboard Supabase → <b>SQL Editor</b> ed esegui:<br>' +
+                            '<code class="bg-white px-2 py-1 rounded text-xs block mt-1 break-all">update public.profiles set is_admin = true where id = \'' + currentUser.id + '\';</code>' +
+                            'Poi ricarica questa pagina e vedrai i pulsanti per aggiungere contenuti. 🚀';
+                        document.querySelector('main').prepend(div);
+                    }
                 }
+            }
+            if (currentUser && !profileMissing) {
+                const h = document.getElementById('admin-hint');
+                if (h && isAdmin) h.remove();
             }
         }
 
         async function login() {
+            // Se c'è già una sessione valida, non serve reinserire le credenziali:
+            // (capitava di ritrovarsi "non loggati" per colpa di un token vecchio nell'URL)
+            const { data: { session } } = await sb.auth.getSession();
+            if (session?.user) {
+                currentUser = session.user;
+                renderAuthUI();
+                await checkRole();
+                loadData();
+                showMsg('Bentornato/a! La tua sessione era ancora attiva. 😊');
+                return;
+            }
+
             const nome = prompt("Il tuo nome (solo la prima volta):");
             const email = prompt("La tua email:");
             const password = prompt("Password (almeno 6 caratteri):");
             if (!email || !password) return;
 
-            // Prima prova a registrare l'utente (se già esiste, Supabase lo dice e facciamo login)
-            const { data: signUpData, error: regError } = await sb.auth.signUp({
-                email, password,
-                options: { data: { nome: nome || 'Utente' } }
-            });
+            // 1) Prima prova il LOGIN diretto: non invia email, quindi non consuma
+            //    la quota di Supabase (così evitiamo l'errore "email rate limit reached").
+            const { error: loginError } = await sb.auth.signInWithPassword({ email, password });
+            if (!loginError) {
+                await checkUser();
+                return;
+            }
 
-            if (regError) {
-                const msg = (regError.message || '').toLowerCase();
-                if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('confirmed')) {
-                    // L'utente esiste già: normale login
-                    const { error } = await sb.auth.signInWithPassword({ email, password });
-                    if (error) showMsg(error.message, 'error');
-                    else await checkUser();
+            const lm = (loginError.message || '').toLowerCase();
+            if (lm.includes('invalid login') || lm.includes('invalid credentials') || lm.includes('not found')) {
+                // 2) L'utente non esiste: proviamo a registrarlo.
+                const { data: signUpData, error: regError } = await sb.auth.signUp({
+                    email, password,
+                    options: { data: { nome: nome || 'Utente' }, emailRedirectTo: SITE_URL }
+                });
+
+                if (regError) {
+                    const msg = (regError.message || '').toLowerCase();
+                    if (msg.includes('rate limit')) {
+                        showMsg("Supabase ha momentaneamente bloccato l'invio di email di conferma (limite raggiunto). ⏳ Riprova tra un po', oppure — subito dopo questa registrazione — vai nella dashboard Supabase → Authentication → Sign In / Up e DISATTIVA 'Confirm email': a quel punto ti basterà premere di nuovo 'Accedi' ed entrerai senza aspettare nessuna mail. 🙌", 'error');
+                    } else if (msg.includes('already registered') || msg.includes('already exists')) {
+                        showMsg("Mmm, risulta che questo account esista già: riprova ad accedere con le tue credenziali. 🔁", 'error');
+                    } else {
+                        showMsg(regError.message, 'error');
+                    }
+                    return;
+                }
+
+                if (signUpData.session) {
+                    // Conferma email disabilitata: sessione immediata
+                    showMsg("Evviva! Account creato, benvenuto/a nella community! 🚴");
+                    await checkUser();
                 } else {
-                    showMsg(regError.message, 'error');
+                    signUpPendingUser = { email };
+                    showMsg("Registrato! Controlla la tua email per confermare l'account, poi premi di nuovo 'Accedi'. 📬 (Se la mail non arriva per il limite di Supabase: disattiva 'Confirm email' nella dashboard e riprova.)", 'error');
+                    renderAuthUI();
                 }
                 return;
             }
 
-            if (signUpData.session) {
-                // Registrazione completata e sessione attiva (conferma email disabilitata)
-                showMsg("Evviva! Account creato, benvenuto/a nella community! 🚴");
-                await checkUser();
-            } else {
-                // Serve confermare l'email: proviamo comunque il login (forse è già confermata)
-                const { error } = await sb.auth.signInWithPassword({ email, password });
-                if (error) showMsg("Registrato! Controlla la tua email per confermare l'account, poi riprova ad accedere. 📬");
-                else await checkUser();
+            // 3) Esiste ma va confermata l'email: messaggio dedicato
+            if (lm.includes('confirm')) {
+                signUpPendingUser = { email };
+                showMsg("Quasi fatto! Devi solo confermare l'email: apri il link che ti abbiamo inviato, poi riprova ad accedere. 📬", 'error');
+                renderAuthUI();
+                return;
+            }
+
+            // Errore generico (es. troppi tentativi falliti)
+            showMsg(loginError.message, 'error');
+        }
+
+        // --- DIAGNOSTICA: segnala in alto eventuali errori Supabase (es. tabelle mancanti) ---
+        async function checkSchema() {
+            const problems = [];
+            for (const t of ['uscite', 'gare', 'profiles']) {
+                const { error } = await sb.from(t).select('*').limit(1);
+                if (error && (error.code === '42P01' || error.code === 'PGRST205')) problems.push(t);
+            }
+            if (problems.length) {
+                const box = document.createElement('div');
+                box.className = 'mb-4 p-4 rounded-xl bg-yellow-100 text-yellow-900 text-sm font-semibold card-anim';
+                box.innerHTML = '⚠️ Nel database Supabase mancano ancora le tabelle: <b>' + problems.join(', ') + '</b>.<br>' +
+                    'Apri la dashboard Supabase → <b>SQL Editor</b> ed esegui lo script di creazione (setup.sql del progetto), poi ricarica questa pagina.';
+                document.querySelector('main').prepend(box);
             }
         }
 
@@ -305,12 +465,12 @@
 
             if (type === 'uscita') {
                 const { error } = await sb.from('uscite').insert({ titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl });
-                if (error) showMsg("Ops! Non siamo riusciti a salvare l'uscita.", 'error');
-                else showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
+                if (error) { console.error('insert uscite:', error); showMsg("Ops! Non siamo riusciti a salvare l'uscita (" + error.message + ").", 'error'); return; }
+                showMsg("Uscita pubblicata! Buona pedalata! 🚴💨");
             } else {
                 const { error } = await sb.from('gare').insert({ titolo, data_gara: data, luogo: extra });
-                if (error) showMsg("Ops! Non siamo riusciti a salvare la gara.", 'error');
-                else showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
+                if (error) { console.error('insert gare:', error); showMsg("Ops! Non siamo riusciti a salvare la gara (" + error.message + ").", 'error'); return; }
+                showMsg("Gara pubblicata! Che vinca il migliore! 🏆");
             }
             
             closeModal();
@@ -319,6 +479,7 @@
 
         // AVVIO
         checkUser();
+        checkSchema();
     </script>
 </body>
 </html>
