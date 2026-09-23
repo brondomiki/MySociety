@@ -657,10 +657,12 @@
             showModal('Uscita Rimossa', 'L uscita è stata eliminata dal portale.', 'fa-solid fa-trash-can');
         }
 
-        // Admin: Reset Default Rides
+        // Admin: Reset Default Rides and Races
         function resetDefaultRides() {
             rides = [...defaultRides];
+            races = [...defaultRaces];
             localStorage.setItem('asd_rides', JSON.stringify(rides));
+            localStorage.setItem('asd_races', JSON.stringify(races));
             renderRides();
             renderRaces();
             renderAdminTable();
