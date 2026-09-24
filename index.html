@@ -1,887 +1,979 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portale Ciclismo</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
-    <style>
-        body { font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; }
-        .map-container { height: 300px; width: 100%; border-radius: 16px; margin-top: 10px; overflow: hidden; }
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #f97316; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .card-anim { animation: fadeInUp 0.4s ease both; }
-        .btn-friendly { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-        .btn-friendly:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
-        .btn-friendly:active { transform: translateY(0) scale(0.98); }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedale Allegro — Community Ciclistica</title>
+<meta name="description" content="Uscite settimanali, gare, classifica e bacheca della community Pedale Allegro.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7fb; --surface:#ffffff; --ink:#0e1a2b; --muted:#5b6b80; --line:#e3e9f2;
+  --brand:#0d9488; --brand-dark:#0f766e; --brand-soft:#ccfbf1;
+  --accent:#f97316; --accent-soft:#ffedd5;
+  --violet:#7c3aed; --violet-soft:#ede9fe;
+  --rose:#e11d48; --rose-soft:#ffe4e6;
+  --sky:#0284c7; --sky-soft:#e0f2fe;
+  --shadow:0 1px 2px rgba(14,26,43,.05),0 8px 24px -12px rgba(14,26,43,.12);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:'Sora','Inter',sans-serif;margin:0;line-height:1.25}
+p{margin:0}
+a{color:var(--brand-dark)}
+.container{max-width:1120px;margin:0 auto;padding:0 20px}
+
+/* ---------- TOPBAR ---------- */
+.topbar{background:linear-gradient(120deg,#0b3b36 0%,#0f766e 55%,#115e59 100%);color:#fff;position:sticky;top:0;z-index:60;box-shadow:0 2px 16px rgba(11,59,54,.35)}
+.topbar-inner{display:flex;align-items:center;gap:16px;padding:12px 20px;max-width:1120px;margin:0 auto;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff}
+.logo-mark{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:20px;border:1px solid rgba(255,255,255,.2)}
+.logo-name{font-family:'Sora';font-weight:800;font-size:18px;letter-spacing:.2px}
+.logo-tag{font-size:11px;color:#99f6e4;font-weight:500}
+.nav-tabs{display:flex;gap:4px;flex:1;overflow-x:auto;scrollbar-width:none}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{border:0;background:transparent;color:#cbeee8;font:inherit;font-weight:600;font-size:13.5px;padding:9px 14px;border-radius:10px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:7px;transition:.18s}
+.nav-tab:hover{background:rgba(255,255,255,.1);color:#fff}
+.nav-tab.active{background:#fff;color:#0f766e;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.nav-badge{background:var(--accent);color:#fff;border-radius:99px;font-size:10.5px;font-weight:700;padding:1px 7px}
+.auth-area{display:flex;align-items:center;gap:8px}
+
+/* ---------- BUTTONS ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;cursor:pointer;font:inherit;font-weight:700;border-radius:11px;padding:9px 16px;transition:transform .15s,box-shadow .15s,background .15s;text-decoration:none;white-space:nowrap}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(14,26,43,.15)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.55;cursor:wait;transform:none}
+.btn-primary{background:var(--brand);color:#fff}
+.btn-primary:hover{background:var(--brand-dark)}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-ghost{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3)}
+.btn-ghost:hover{background:rgba(255,255,255,.25)}
+.btn-light{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn-danger{background:var(--rose-soft);color:#9f1239}
+.btn-danger-solid{background:var(--rose);color:#fff}
+.btn-violet{background:var(--violet);color:#fff}
+.btn-sky{background:var(--sky);color:#fff}
+.btn-sm{padding:6px 12px;font-size:12.5px;border-radius:9px}
+.btn-xs{padding:4px 10px;font-size:11.5px;border-radius:8px}
+.btn-lg{padding:12px 24px;font-size:16px;border-radius:14px}
+
+/* ---------- LAYOUT ---------- */
+main{padding:26px 0 60px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.page-title{font-size:24px;font-weight:800}
+.page-sub{color:var(--muted);font-size:13.5px;margin-top:4px}
+.grid{display:grid;gap:16px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.search{flex:1;min-width:220px;position:relative}
+.search input{width:100%;padding:10px 14px 10px 38px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fff}
+.search .icon{position:absolute;left:12px;top:9px;opacity:.5}
+.select{padding:10px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;background:#fff;color:var(--ink)}
+
+/* ---------- CARDS ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:18px}
+.card-hover{transition:transform .18s, box-shadow .18s}
+.card-hover:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(14,26,43,.05),0 16px 32px -12px rgba(14,26,43,.18)}
+.event-card{display:grid;grid-template-columns:86px 1fr;gap:16px;align-items:start}
+.date-chip{background:linear-gradient(160deg,var(--brand-soft),#f0fdfa);border:1px solid #99f6e4;border-radius:14px;text-align:center;padding:10px 6px}
+.date-chip .d{font-family:'Sora';font-weight:800;font-size:24px;color:var(--brand-dark);line-height:1}
+.date-chip .m{font-size:11px;font-weight:700;color:#0d9488;text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+.date-chip .w{font-size:10.5px;color:#6b948d;margin-top:2px}
+.date-chip.past{background:#f1f5f9;border-color:#e2e8f0}
+.date-chip.past .d{color:#94a3b8}.date-chip.past .m{color:#94a3b8}
+.ev-title{font-family:'Sora';font-weight:700;font-size:16.5px}
+.ev-meta{color:var(--muted);font-size:13px;margin-top:3px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:3.5px 10px;border-radius:99px}
+.b-orange{background:var(--accent-soft);color:#9a3412}
+.b-green{background:#dcfce7;color:#166534}
+.b-teal{background:var(--brand-soft);color:#115e59}
+.b-violet{background:var(--violet-soft);color:#5b21b6}
+.b-sky{background:var(--sky-soft);color:#075985}
+.b-rose{background:var(--rose-soft);color:#9f1239}
+.b-gray{background:#f1f5f9;color:#475569}
+.b-red{background:#fee2e2;color:#991b1b}
+.tag-past{filter:grayscale(.4);opacity:.75}
+.diff{font-size:11.5px;font-weight:700;padding:3.5px 10px;border-radius:99px}
+.d-turista{background:#dcfce7;color:#166534}.d-cicloturista{background:#e0f2fe;color:#075985}
+.d-mediofondo{background:#fef9c3;color:#854d0e}.d-fondo{background:#ffedd5;color:#9a3412}.d-granfondo{background:#ffe4e6;color:#9f1239}
+.map-container{height:280px;width:100%;border-radius:12px;margin-top:12px;overflow:hidden;border:1px solid var(--line);z-index:0}
+.map-placeholder{height:120px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;margin-top:12px}
+
+/* ---------- STATS ---------- */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);display:flex;gap:12px;align-items:center}
+.stat .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.stat .num{font-family:'Sora';font-weight:800;font-size:20px;line-height:1.1}
+.stat .lbl{font-size:11.5px;color:var(--muted);font-weight:600}
+
+/* ---------- ROSTER / TABLE ---------- */
+.roster{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rider{display:inline-flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid var(--line);border-radius:99px;padding:5px 12px 5px 6px;font-size:13px;font-weight:600}
+.avatar{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+table.data{width:100%;border-collapse:collapse;font-size:13.5px}
+table.data th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--line)}
+table.data td{padding:9px 10px;border-bottom:1px solid var(--line)}
+table.data tr:last-child td{border-bottom:0}
+.medal{font-size:16px}
+
+/* ---------- FORMS ---------- */
+.field{display:block;margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff;color:var(--ink);transition:border .15s, box-shadow .15s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(13,148,136,.15)}
+.field textarea{resize:vertical;min-height:80px}
+.hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.form-row{grid-template-columns:1fr}}
+
+/* ---------- MODALS ---------- */
+.overlay{position:fixed;inset:0;background:rgba(14,26,43,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
+.overlay.open{display:flex}
+.modal{background:#fff;border-radius:20px;box-shadow:0 24px 64px -16px rgba(14,26,43,.4);width:100%;max-width:460px;max-height:92vh;overflow-y:auto;animation:pop .22s ease}
+@keyframes pop{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 22px 0}
+.modal-title{font-size:18px;font-weight:800}
+.modal-body{padding:16px 22px 22px}
+.x-btn{border:0;background:#f1f5f9;width:32px;height:32px;border-radius:10px;cursor:pointer;font-size:15px;color:var(--muted)}
+.x-btn:hover{background:#e2e8f0}
+
+/* ---------- MISC ---------- */
+#toast-root{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{background:#0e1a2b;color:#fff;padding:11px 16px;border-radius:12px;font-size:13.5px;font-weight:600;box-shadow:0 12px 32px rgba(14,26,43,.35);animation:slideIn .25s ease;display:flex;gap:8px;align-items:center;max-width:340px}
+.toast.err{background:#9f1239}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+.empty{background:#fff;border:1px dashed var(--line);border-radius:16px;padding:44px 20px;text-align:center;color:var(--muted)}
+.empty .big{font-size:38px;margin-bottom:8px}
+.loader{width:22px;height:22px;border:3px solid #d7e3df;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-box{text-align:center;padding:40px;color:var(--muted)}
+footer.site{background:#0b3b36;color:#9fcfc6;padding:26px 0;font-size:13px;margin-top:20px}
+footer.site a{color:#5eead4}
+.section-title{font-family:'Sora';font-weight:800;font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+.admin-only{display:none}
+body.is-admin .admin-only{display:inline-flex}
+.notice{border-radius:12px;padding:12px 16px;font-size:13px;font-weight:600;margin-bottom:14px}
+.n-warn{background:#fef9c3;color:#713f12;border:1px solid #fde68a}
+.n-info{background:var(--sky-soft);color:#075985;border:1px solid #bae6fd}
+.list-plain{list-style:none;padding:0;margin:0}
+.list-plain li{padding:9px 4px;border-bottom:1px solid var(--line);font-size:13.5px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.list-plain li:last-child{border-bottom:0}
+.kbd{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:11px;font-family:monospace}
+.chip-toggle{border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.chip-toggle.on{background:var(--brand);border-color:var(--brand);color:#fff}
+@media(max-width:760px){
+  .nav-tabs{order:3;width:100%}
+  .event-card{grid-template-columns:64px 1fr}
+  .page-title{font-size:20px}
+}
+</style>
 </head>
-<body class="bg-orange-50 text-gray-800 font-sans">
+<body>
 
-    <!-- Header & Login -->
-    <nav class="bg-gradient-to-r from-orange-500 to-rose-500 text-white p-4 shadow-lg sticky top-0 z-40">
-        <div class="max-w-4xl mx-auto flex justify-between items-center flex-wrap gap-2">
-            <div>
-                <h1 class="text-xl md:text-2xl font-extrabold">🚴 Pedale Allegro</h1>
-                <p class="text-xs md:text-sm text-orange-100">La community che pedala insieme! 🤝💨</p>
-            </div>
-            <div id="auth-area" class="flex items-center gap-3">
-                <!-- Fallback: i pulsanti vengono mostrati subito, prima ancora che JS parta -->
-                <button onclick="openAuthModal('login')" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Login</button>
-                <button onclick="openAuthModal('register')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full font-bold shadow">📝 Registrati</button>
-            </div>
-        </div>
+<!-- ============ TOPBAR ============ -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="logo" href="#" onclick="switchTab('home');return false;">
+      <span class="logo-mark">🚴</span>
+      <span><span class="logo-name">Pedale Allegro</span><br><span class="logo-tag">Community ciclistica · dal 2020</span></span>
+    </a>
+    <nav class="nav-tabs" id="nav-tabs">
+      <button class="nav-tab active" data-tab="home" onclick="switchTab('home')">🏠 Home</button>
+      <button class="nav-tab" data-tab="uscite" onclick="switchTab('uscite')">🗺️ Uscite</button>
+      <button class="nav-tab" data-tab="gare" onclick="switchTab('gare')">🏁 Gare <span class="nav-badge" id="gare-badge" style="display:none"></span></button>
+      <button class="nav-tab" data-tab="bacheca" onclick="switchTab('bacheca')">💬 Bacheca</button>
+      <button class="nav-tab" data-tab="classifica" onclick="switchTab('classifica')">🏆 Classifica</button>
+      <button class="nav-tab" data-tab="gruppo" onclick="switchTab('gruppo')">👥 Il Gruppo</button>
+      <button class="nav-tab admin-only" data-tab="admin" onclick="switchTab('admin')">🛡️ Admin <span class="nav-badge" style="background:#e11d48">riservato</span></button>
     </nav>
+    <div class="auth-area" id="auth-area">
+      <button class="btn btn-ghost btn-sm" onclick="openAuthModal('login')">Accedi</button>
+      <button class="btn btn-accent btn-sm" onclick="openAuthModal('register')">Registrati</button>
+    </div>
+  </div>
+</header>
 
-    <main class="max-w-4xl mx-auto p-4">
-        <!-- Benvenuto -->
-        <div class="mt-4 mb-2 bg-white rounded-2xl shadow p-5 card-anim">
-            <h2 class="text-lg font-bold text-orange-600">Ciao, benvenuto/a! 👋</h2>
-            <p class="text-sm text-gray-600 mt-1">Qui trovi tutte le uscite settimanali e le gare in programma. Scegli una scheda qui sotto e... buona pedalata! 🚴‍♀️✨</p>
+<main class="container">
+  <div id="notice-area"></div>
+  <div id="content-area"><div class="loading-box"><span class="loader"></span>&nbsp; Caricamento…</div></div>
+</main>
+
+<footer class="site">
+  <div class="container" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <span>© <span id="year"></span> Pedale Allegro — Fatto con ❤️ e tanto fiato in salita.</span>
+    <span>Info & iscrizioni: <a href="mailto:info@pedaleallegro.it">info@pedaleallegro.it</a></span>
+  </div>
+</footer>
+
+<div id="toast-root"></div>
+
+<!-- ============ MODALE AUTH ============ -->
+<div class="overlay" id="auth-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="modal-title" id="auth-title">Accedi</h3><button class="x-btn" onclick="closeAuthModal()">✕</button></div>
+    <div class="modal-body">
+      <p class="page-sub" id="auth-sub" style="margin:-6px 0 16px"></p>
+      <form id="auth-form">
+        <input type="hidden" id="auth-mode" value="login">
+        <div class="field" id="nome-field"><label>Nome</label><input id="a-nome" placeholder="Come ti chiamano in gruppo?" autocomplete="name"></div>
+        <div class="field"><label>Email</label><input id="a-email" type="email" placeholder="tu@email.it" autocomplete="email" required></div>
+        <div class="field"><label>Password</label><input id="a-password" type="password" placeholder="Minimo 6 caratteri" autocomplete="current-password" minlength="6" required></div>
+        <p id="auth-error" class="notice n-warn" style="display:none"></p>
+        <button class="btn btn-primary btn-lg" style="width:100%" id="auth-submit-btn" type="submit">Accedi</button>
+        <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:14px">
+          <span id="auth-switch-label"></span>
+          <a href="#" id="auth-switch-btn" onclick="toggleAuthMode();return false;" style="font-weight:700"></a>
+        </p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODALE EVENTO (uscita/gara) ============ -->
+<div class="overlay" id="event-modal">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-head"><h3 class="modal-title" id="ev-modal-title">Nuovo evento</h3><button class="x-btn" onclick="closeEventModal()">✕</button></div>
+    <div class="modal-body">
+      <form id="event-form">
+        <input type="hidden" id="form-type"><input type="hidden" id="form-id">
+        <div class="field"><label>Titolo *</label><input id="f-titolo" placeholder="es. Girello del mercoledì" required></div>
+        <div class="form-row">
+          <div class="field"><label>Data *</label><input id="f-data" type="date" required></div>
+          <div class="field"><label>Orario ritrovo</label><input id="f-ora" type="time" value="07:30"></div>
         </div>
-
-        <!-- Area Messaggi -->
-        <div id="msg" class="mb-4 p-3 rounded-xl hidden"></div>
-
-        <!-- Tabs -->
-        <div class="flex gap-2 mb-6 mt-4">
-            <button onclick="switchTab('uscite')" id="tab-uscite" class="btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600">🗺️ Uscite Settimanali</button>
-            <button onclick="switchTab('gare')" id="tab-gare" class="btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600">🏁 Gare</button>
-            <button onclick="switchTab('admin')" id="tab-admin" class="btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600 hidden">🛡️ Area Riservata</button>
-            <div id="admin-btns" class="ml-auto hidden flex items-center gap-2"></div>
+        <div class="form-row">
+          <div class="field"><label id="lbl-extra">Luogo di partenza</label><input id="f-extra" placeholder="es. Piazza Grande"></div>
+          <div class="field"><label>Ritmo / difficoltà</label>
+            <select id="f-ritmo">
+              <option value="">— non specificato —</option>
+              <option>T+ Turista</option><option>T- Turista</option><option>C+ Cicloturista</option><option>C- Cicloturista</option>
+              <option>M+ Mediofondo</option><option>M- Mediofondo</option><option>F Fondo</option><option>GF Granfondo</option>
+            </select>
+          </div>
         </div>
-
-        <!-- Contenuto -->
-        <div id="content-area"></div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="text-center py-6 text-sm text-gray-500">
-        Fatto con ❤️ e tanta fatica in salita — <span class="font-semibold">Pedale Allegro</span> 🚴
-    </footer>
-
-    <!-- Modale Login / Registrazione (Nascosto di default) -->
-    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
-        <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-md card-anim">
-            <h3 id="auth-modal-title" class="text-xl font-extrabold mb-4 text-orange-600"></h3>
-            <p id="auth-modal-sub" class="text-sm text-gray-500 -mt-3 mb-4"></p>
-            <form id="auth-form" class="space-y-4">
-                <input type="hidden" id="auth-mode">
-                <input type="text" id="a-nome" placeholder="👤 Il tuo nome" autocomplete="name" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <input type="email" id="a-email" placeholder="📧 Email" autocomplete="email" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <input type="password" id="a-password" placeholder="🔒 Password (almeno 6 caratteri)" autocomplete="current-password" minlength="6" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <p id="auth-error" class="hidden text-sm font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2"></p>
-                <div class="flex gap-2 pt-2">
-                    <button type="submit" id="auth-submit-btn" class="btn-friendly bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600">🔑 Accedi</button>
-                    <button type="button" onclick="closeAuthModal()" class="btn-friendly bg-gray-100 text-gray-600 px-5 py-2 rounded-full font-bold hover:bg-gray-200">Annulla</button>
-                </div>
-                <p class="text-sm text-gray-500 text-center pt-1"><span id="auth-switch-label"></span> <button type="button" id="auth-switch-btn" onclick="toggleAuthMode()" class="font-bold text-orange-600 hover:underline"></button></p>
-            </form>
+        <div class="form-row">
+          <div class="field"><label>Distanza (km)</label><input id="f-distanza" type="number" step="0.1" min="0" placeholder="45.5"></div>
+          <div class="field"><label>Dislivello (m)</label><input id="f-dislivello" type="number" min="0" placeholder="650"></div>
         </div>
+        <div class="field"><label>Descrizione / note</label><textarea id="f-desc" placeholder="Percorso, soste bar, sconsigliato se…"></textarea></div>
+        <div class="field" id="gpx-field" style="display:none">
+          <label>Traccia GPX</label>
+          <input id="f-gpx" type="file" accept=".gpx" style="padding:8px;border-style:dashed">
+          <p class="hint" id="gpx-stats" style="display:none;color:var(--brand-dark);font-weight:700"></p>
+        </div>
+        <div id="ev-error"></div>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <button type="submit" class="btn btn-primary" style="flex:1">💾 Salva evento</button>
+          <button type="button" class="btn btn-light" onclick="closeEventModal()">Annulla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODALE PROFILO ============ -->
+<div class="overlay" id="profile-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 class="modal-title">Il mio profilo</h3><button class="x-btn" onclick="closeProfileModal()">✕</button></div>
+    <div class="modal-body">
+      <form id="profile-form">
+        <div class="field"><label>Nome visualizzato</label><input id="p-nome" placeholder="Il tuo nome in gruppo"></div>
+        <div class="field"><label>Bike tag (facoltativo)</label><input id="p-bike" placeholder="es. Pinarello Dogma · Groupy 🚵"></div>
+        <p class="hint" style="margin-bottom:14px">Email: <b id="p-email"></b> · <span id="p-role"></span></p>
+        <div style="display:flex;gap:10px">
+          <button type="submit" class="btn btn-primary" style="flex:1">💾 Salva</button>
+          <button type="button" class="btn btn-danger" onclick="logout()">Esci</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= CONFIG SUPABASE =================
+const SUPABASE_URL = 'https://wrcvolbhjpzyraooldmt.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
+const SITE_URL = window.location.origin + window.location.pathname;
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { flowType: 'implicit', detectSessionInUrl: true, redirectTo: SITE_URL }
+});
+
+let currentUser = null, isAdmin = false, profileMissing = false, signUpPendingUser = null;
+let myProfile = null;
+let cacheUscite = [], cacheGare = [], cacheProfili = [], cacheMessaggi = [];
+let currentTab = 'home';
+const MESES = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+
+// ================= UTIL =================
+const $ = id => document.getElementById(id);
+function escHTML(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function todayISO(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function fmtDate(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function fmtLong(iso){ if(!iso) return ''; const dt=new Date(iso+'T12:00:00'); return GIORNI[dt.getDay()]+' '+dt.getDate()+' '+MESES[dt.getMonth()]+' '+String(dt.getFullYear()).slice(2); }
+function avatarColor(name){ let h=0; for(const c of String(name||'?')) h=(h*31+c.charCodeAt(0))%360; return `hsl(${h} 55% 42%)`; }
+function initials(n){ return String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function toast(text, err=false){
+  const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=text;
+  $('toast-root').appendChild(t); setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),320)},3400);
+}
+function notice(html, cls='n-info'){ $('notice-area').innerHTML = html?`<div class="notice ${cls}">${html}</div>`:''; }
+function diffClass(r){ if(!r) return ''; const k=r[0]; return {'T':'d-turista','C':'d-cicloturista','M':'d-mediofondo','F':'d-fondo','G':'d-granfondo'}[k]||'d-cicloturista'; }
+function loadingBox(msg){ return `<div class="loading-box"><span class="loader"></span>&nbsp; ${msg||'Caricamento…'}</div>`; }
+function emptyBox(icon,title,sub){ return `<div class="empty"><div class="big">${icon}</div><b>${title}</b><div style="font-size:13px;margin-top:4px">${sub||''}</div></div>`; }
+function km(v){ return v==null?'':Number(v).toLocaleString('it-IT')+' km'; }
+function mt(v){ return v==null?'':Number(v).toLocaleString('it-IT')+' m D+'; }
+function isFuture(iso){ return iso && iso >= todayISO(); }
+
+// ================= AUTENTICAZIONE =================
+async function checkUser(){
+  await salvageSessionFromUrl();
+  if (window.location.hash.includes('access_token') || window.location.search.includes('code=')){
+    try{
+      const {data,error}=await sb.sessionFromUrl(window.location.href);
+      if(error) console.warn('sessionFromUrl:',error.message);
+      else if(data.session) toast('Email confermata! Benvenuto/a 🎉');
+    }catch(e){console.warn(e)}
+    history.replaceState(null,'',window.location.pathname+window.location.search);
+  }
+  if (window.location.hash.includes('type=recovery')){
+    const nuova=prompt('Password recuperata! Scegli una nuova password (almeno 6 caratteri):');
+    if(nuova&&nuova.length>=6){ const {error}=await sb.auth.updateUser({password:nuova}); error?toast(error.message,true):toast('Password aggiornata 🔓'); }
+  }
+  const {data:{session}}=await sb.auth.getSession();
+  currentUser=session?.user??null;
+  renderAuthUI();
+  if(currentUser) await checkRole();
+  loadData(currentTab);
+}
+
+function salvageSessionFromUrl(){
+  return new Promise(resolve=>{
+    try{
+      const h=window.location.hash||'';
+      if(h.includes('access_token')&&!h.includes('error')){
+        const p=new URLSearchParams(h.slice(1)); const at=p.get('access_token'),rt=p.get('refresh_token');
+        if(at){
+          const user=JSON.parse(localStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token')||'null');
+          if(user?.currentSession?.access_token===at){resolve(true);return}
+          sb.auth.setSession({access_token:at,refresh_token:rt}).then(()=>resolve(true));
+          history.replaceState(null,'',window.location.pathname+window.location.search); return;
+        }
+      }
+      if(window.location.search.includes('error=')) history.replaceState(null,'',window.location.pathname);
+    }catch(e){console.warn(e)}
+    resolve(false);
+  });
+}
+
+async function checkRole(){
+  profileMissing=false;
+  const {data,error}=await sb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle();
+  if(error){ console.warn('profilo:',error.message); }
+  else if(!data){
+    profileMissing=true;
+    const {error:insErr}=await sb.from('profiles').insert({id:currentUser.id,nome:currentUser.user_metadata?.nome||'Atleta',is_admin:false});
+    if(insErr) toast('Profilo non ancora creato: contatta un admin.',true);
+    else{ profileMissing=false; toast('Profilo creato! Ora sei dei nostri 🚴'); }
+  }else{ myProfile=data; }
+  if(profileMissing){ const {data:f}=await sb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle(); if(f) myProfile=f; }
+  isAdmin=myProfile?.is_admin||false;
+  document.body.classList.toggle('is-admin',isAdmin);
+  renderAuthUI();
+}
+
+function renderAuthUI(){
+  const area=$('auth-area');
+  if(!currentUser){
+    area.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="openAuthModal('login')">Accedi</button>
+      <button class="btn btn-accent btn-sm" onclick="openAuthModal('register')">Registrati</button>`;
+    if(signUpPendingUser) notice(`📬 <b>Ultimo passo!</b> Account creato per <b>${escHTML(signUpPendingUser.email)}</b>: apri il link di conferma nella tua email, poi ricarica la pagina ed accedi.`);
+    else notice();
+  }else{
+    const nome=myProfile?.nome||currentUser.user_metadata?.nome||'Atleta';
+    area.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="openProfileModal()" title="Il mio profilo">
+        <span class="avatar" style="width:22px;height:22px;font-size:9.5px;background:${avatarColor(nome)}">${initials(nome)}</span> Ciao ${escHTML(nome)}</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()" title="Esci">⎋</button>`;
+    if(!isAdmin && currentTab==='admin') switchTab('home');
+    notice();
+  }
+}
+
+async function logout(){ await sb.auth.signOut(); location.reload(); }
+
+// ---- modale auth ----
+function openAuthModal(mode){
+  $('auth-modal').classList.add('open');
+  $('a-nome').value=localStorage.getItem('pa_nome')||'';
+  $('a-email').value=''; $('a-password').value=''; hideAuthError();
+  setAuthMode(mode); setTimeout(()=>$('a-email').focus(),60);
+}
+function closeAuthModal(){ $('auth-modal').classList.remove('open'); }
+function toggleAuthMode(){ setAuthMode($('auth-mode').value==='login'?'register':'login'); }
+function setAuthMode(mode){
+  $('auth-mode').value=mode;
+  const login=mode==='login';
+  $('auth-title').textContent=login?'🔑 Bentornato/a':'📝 Unisciti al gruppo';
+  $('auth-sub').textContent=login?'Accedi per iscriverti alle uscite e gestire il tuo profilo.':'Bastano 30 secondi. Ti serve solo un\'email valida.';
+  $('auth-submit-btn').textContent=login?'Accedi':'Crea il mio account';
+  $('nome-field').style.display=login?'none':'block';
+  $('a-nome').required=!login;
+  $('auth-switch-label').textContent=login?'Non hai un account?':'Hai già un account?';
+  $('auth-switch-btn').textContent=login?'Registrati':'Accedi';
+}
+$('auth-modal').addEventListener('click',e=>{if(e.target.id==='auth-modal')closeAuthModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open'))});
+function showAuthError(t){ const el=$('auth-error'); el.textContent='😅 '+t; el.style.display='block'; }
+function hideAuthError(){ $('auth-error').style.display='none'; }
+
+$('auth-form').addEventListener('submit',async e=>{
+  e.preventDefault(); hideAuthError();
+  const mode=$('auth-mode').value, email=$('a-email').value.trim(), pw=$('a-password').value;
+  const btn=$('auth-submit-btn'); btn.disabled=true;
+  try{ mode==='login'?await doLogin(email,pw):await doRegister(email,pw); } finally{ btn.disabled=false; }
+});
+async function doLogin(email,password){
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(!error){ closeAuthModal(); await checkUser(); toast('Benvenuto/a di nuovo! 🚴'); return; }
+  const m=(error.message||'').toLowerCase();
+  if(m.includes('invalid')||m.includes('not found')) showAuthError('Email o password non corretti, oppure l\'account non esiste. Prova a registrarti!');
+  else if(m.includes('confirm')){ signUpPendingUser={email}; showAuthError('Devi ancora confermare l\'email: apri il link ricevuto, poi riprova.'); }
+  else showAuthError(error.message);
+}
+async function doRegister(email,password){
+  const nome=$('a-nome').value.trim()||'Utente';
+  const {data:res,error:regError}=await sb.auth.signUp({email,password,options:{data:{nome},emailRedirectTo:SITE_URL}});
+  if(regError){
+    const m=(regError.message||'').toLowerCase();
+    if(m.includes('rate limit')) showAuthError('Supabase ha temporaneamente limitato le email di conferma. Riprova tra poco, o disattiva "Confirm email" nella dashboard Supabase → Authentication.');
+    else if(m.includes('already')) showAuthError('Questo account esiste già: passa ad Accedi.');
+    else showAuthError(regError.message);
+    return;
+  }
+  localStorage.setItem('pa_nome',nome);
+  if(res?.session){ closeAuthModal(); toast('Evviva! Account creato 🚴'); await checkUser(); }
+  else{ signUpPendingUser={email}; closeAuthModal(); toast('Registrato! Conferma l\'email che ti abbiamo inviato 📬'); renderAuthUI(); }
+}
+
+// ================= SCHEMA CHECK =================
+async function checkSchema(){
+  const problems=[];
+  for(const t of ['uscite','gare','profiles','messaggi']){
+    const {error}=await sb.from(t).select('*').limit(1);
+    if(error&&(error.code==='42P01'||error.code==='PGRST205')) problems.push(t);
+  }
+  if(problems.length) notice('⚠️ Nel database mancano le tabelle <b>'+problems.join(', ')+'</b>. Esegui <b>setup.sql</b> nella dashboard Supabase → SQL Editor (è stato aggiornato con la bacheca e i nuovi campi), poi ricarica.','n-warn');
+}
+
+// ================= NAV =================
+function switchTab(tab){
+  if(tab==='admin'&&!isAdmin){ toast('Area riservata agli amministratori 🛡️',true); return; }
+  currentTab=tab;
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  window.scrollTo({top:0,behavior:'smooth'});
+  loadData(tab);
+}
+
+async function loadData(tab=currentTab){
+  const area=$('content-area');
+  area.innerHTML=loadingBox();
+  try{
+    if(tab==='home') await renderHome();
+    else if(tab==='uscite') await renderUscite();
+    else if(tab==='gare') await renderGare();
+    else if(tab==='bacheca') await renderBacheca();
+    else if(tab==='classifica') await renderClassifica();
+    else if(tab==='gruppo') await renderGruppo();
+    else if(tab==='admin') await renderAdmin();
+  }catch(e){ console.error(e); area.innerHTML=emptyBox('🛠️','Qualcosa non ha funzionato','<span class="kbd">'+escHTML(e.message)+'</span>'); }
+}
+
+// ================= HOME =================
+async function renderHome(){
+  const [{data:uscite},{data:gare},{data:profili}] = await Promise.all([
+    sb.from('uscite').select('*').order('data_uscita',{ascending:false}),
+    sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara',{ascending:false}),
+    sb.from('profiles').select('id,nome,is_admin,bike_tag')
+  ]);
+  cacheUscite=uscite||[]; cacheGare=gare||[]; cacheProfili=profili||[];
+  const prossimi=[...cacheUscite.map(u=>({...u,tipo:'uscita'})),...cacheGare.map(g=>({...g,tipo:'gara',data_uscita:g.data_gara}))]
+    .filter(e=>isFuture(e.data_uscita)).sort((a,b)=>a.data_uscita.localeCompare(b.data_uscita));
+  const kmTotali=cacheUscite.reduce((s,u)=>s+(Number(u.distanza_km)||0),0);
+  const d=prossimi[0];
+  const badge=$('gare-badge'); const ng=cacheGare.filter(g=>isFuture(g.data_gara)).length;
+  if(badge){ badge.style.display=ng?'inline-block':'none'; badge.textContent=ng; }
+
+  $('content-area').innerHTML=`
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:22px;border:0;background:linear-gradient(120deg,#0b3b36,#0f766e 60%,#0d9488)">
+    <div style="padding:34px 30px;color:#fff">
+      <p style="color:#5eead4;font-weight:700;font-size:12.5px;letter-spacing:1.5px;text-transform:uppercase">🚴 Pedale Allegro</p>
+      <h1 style="font-size:clamp(22px,3.4vw,34px);color:#fff;margin:8px 0 10px">Uscite settimanali, gare e tanta aria buona.<br>Insieme.</h1>
+      <p style="color:#b8e8e0;max-width:560px">Consulta il programma, iscriviti alle gare, proponi i tuoi percorsi in bacheca e tieni d'occhio la classifica del gruppo.</p>
+      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+        <button class="btn btn-accent btn-lg" onclick="switchTab('uscite')">📅 Vedi le uscite</button>
+        <button class="btn btn-ghost btn-lg" onclick="switchTab('gare')">🏁 Prossime gare</button>
+        ${!currentUser?'<button class="btn btn-light btn-lg" onclick="openAuthModal(\'register\')">Unisciti al gruppo →</button>':''}
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    ${statCard('🗓️','#ccfbf1',prossimi.length,'Eventi in calendario')}
+    ${statCard('🚴','#ffedd5',cacheUscite.length,'Uscite pubblicate')}
+    ${statCard('🏁','#ede9fe',cacheGare.length,'Gare in programma')}
+    ${statCard('👥','#e0f2fe',(profili||[]).length,'Membri del gruppo')}
+    ${statCard('📏','#dcfce7',Math.round(kmTotali)+' km','Km proposti')}
+  </div>
+
+  ${d?`<div class="section-title">⭐ Prossimo appuntamento</div>
+  <div class="card card-hover event-card" style="border-left:4px solid var(--accent)">
+    ${dateChip(d.data_uscita)}
+    <div>
+      <span class="badge ${d.tipo==='uscita'?'b-teal':'b-violet'}">${d.tipo==='uscita'?'🚴 Uscita':'🏁 Gara'}</span>
+      <div class="ev-title" style="margin-top:6px">${escHTML(d.titolo)}</div>
+      <div class="ev-meta">${fmtLong(d.data_uscita)}${(d.luogo||d.descrizione)?' · 📍 '+escHTML(d.luogo||d.descrizione):''}${d.ora_ritrovo?' · ⏰ '+d.ora_ritrovo:''}</div>
+      <div class="badges">${evBadges(d)}</div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="switchTab('${d.tipo}')">Apri il calendario →</button>
+        ${d.tipo==='gara'&&currentUser&&!isAdmin&&!isIscritto(d)?`<button class="btn btn-violet btn-sm" onclick="iscriviti(${d.id},'${d.tipo}')">💪 Partecipa ora</button>`:''}
+      </div>
+    </div>
+  </div>`:''}
+
+  <div class="section-title">📌 I prossimi ${Math.min(prossimi.length,4)||''} appuntamenti</div>
+  ${prossimi.length?`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${prossimi.slice(0,4).map(e=>miniEvent(e)).join('')}</div>`:emptyBox('🌱','Nessun evento in programma','Torna a trovarci: il calendario si aggiorna ogni settimana!')}
+
+  <div class="section-title">💬 Dalla bacheca</div>
+  <div id="home-feed">${loadingBox('Leggo la bacheca…')}</div>`;
+
+  loadHomeFeed();
+}
+function statCard(ico,bg,num,lbl){ return `<div class="stat"><div class="ico" style="background:${bg}">${ico}</div><div><div class="num">${num}</div><div class="lbl">${lbl}</div></div></div>`; }
+function dateChip(iso){
+  if(!iso) return '<div class="date-chip past"><div class="d">?</div><div class="m">—</div></div>';
+  const [,m,d]=iso.split('-'); const dt=new Date(iso+'T12:00:00');
+  return `<div class="date-chip ${isFuture(iso)?'':'past'}"><div class="d">${d}</div><div class="m">${MESES[+m-1]}</div><div class="w">${GIORNI[dt.getDay()]}</div></div>`;
+}
+function evBadges(e){
+  const b=[];
+  if(e.ritmo) b.push(`<span class="diff ${diffClass(e.ritmo)}">${escHTML(e.ritmo)}</span>`);
+  if(e.distanza_km!=null) b.push(`<span class="badge b-orange">📏 ${km(e.distanza_km)}</span>`);
+  if(e.dislivello_m!=null) b.push(`<span class="badge b-green">⛰️ ${mt(e.dislivello_m)}</span>`);
+  if(e.ora_ritrovo) b.push(`<span class="badge b-sky">⏰ ${escHTML(e.ora_ritrovo)}</span>`);
+  if(e.tipo==='gara'||e.data_gara) b.push(`<span class="badge b-violet">🎟️ ${(e.iscrizioni||[]).length} iscritti</span>`);
+  return b.join('');
+}
+function isIscritto(g){ return currentUser&&(g.iscrizioni||[]).some(i=>i.user_id===currentUser.id); }
+function miniEvent(e){
+  return `<div class="card card-hover event-card ${isFuture(e.data_uscita)?'':'tag-past'}" style="padding:14px">
+    ${dateChip(e.data_uscita)}
+    <div style="min-width:0">
+      <span class="badge ${e.tipo==='uscita'?'b-teal':'b-violet'}" style="font-size:10.5px">${e.tipo==='uscita'?'🚴 Uscita':'🏁 Gara'}</span>
+      <div class="ev-title" style="font-size:14.5px;margin-top:5px">${escHTML(e.titolo)}</div>
+      <div class="badges" style="margin-top:6px">${evBadges(e)}</div>
+    </div>
+  </div>`;
+}
+async function loadHomeFeed(){
+  const el=$('home-feed'); if(!el) return;
+  const {data}=await sb.from('messaggi').select('id,testo,created_at,autore:profiles(nome)').order('created_at',{ascending:false}).limit(3);
+  el.innerHTML=(data&&data.length)?`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${data.map(m=>`
+    <div class="card" style="padding:14px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <span class="avatar" style="background:${avatarColor(m.autore?.nome)}">${initials(m.autore?.nome)}</span>
+      <b style="font-size:13px">${escHTML(m.autore?.nome||'Anonimo')}</b>
+      <span style="margin-left:auto;font-size:11px;color:var(--muted)">${relTime(m.created_at)}</span></div>
+      <p style="font-size:13px;color:#334155">${escHTML(m.testo)}</p></div>`).join('')}</div>`
+    :'<div class="card" style="font-size:13px;color:var(--muted)">La bacheca è vuota: <a href="#" onclick="switchTab(\'bacheca\');return false">sii il primo a scrivere</a>.</div>';
+}
+function relTime(iso){
+  const s=(Date.now()-new Date(iso))/1000;
+  if(s<3600) return Math.max(1,Math.round(s/60))+' min fa';
+  if(s<86400) return Math.round(s/3600)+' h fa';
+  if(s<604800) return Math.round(s/86400)+' g fa';
+  return fmtDate(iso.slice(0,10));
+}
+
+// ================= USCITE =================
+async function renderUscite(){
+  const {data}=await sb.from('uscite').select('*').order('data_uscita',{ascending:false});
+  cacheUscite=data||[];
+  const futuri=cacheUscite.filter(u=>isFuture(u.data_uscita)), passati=cacheUscite.filter(u=>!isFuture(u.data_uscita));
+  $('content-area').innerHTML=`
+    <div class="page-head">
+      <div><h1 class="page-title">🗺️ Uscite settimanali</h1><p class="page-sub">${futuri.length} in programma · ${passati.length} archiviate</p></div>
+      <div style="display:flex;gap:8px">
+        <button class="chip-toggle on" id="flt-futuro" onclick="togglePast(this)">Prossime</button>
+        <button class="btn btn-primary admin-only" onclick="openEventModal('uscita')">➕ Nuova uscita</button>
+      </div>
+    </div>
+    <div id="list-uscite" class="grid">${futuri.length?futuri.map(u=>uscitaCard(u)).join(''):emptyBox('🚴‍♂️💨','Nessuna uscita in programma','Controlla tra pochi giorni o guarda quelle passate cliccando "Prossime".')}</div>
+    <div id="past-uscite" style="display:none">
+      <div class="section-title">🗄️ Archivio uscite</div>
+      <div class="grid">${passati.length?passati.map(u=>uscitaCard(u)).join(''):'<p style="color:var(--muted);font-size:13px">Vuoto anche lì!</p>'}</div>
+    </div>`;
+  futuri.concat(passati).forEach(u=>{ if(u.gpx_url) initMap('map-'+u.id,u.gpx_url); });
+}
+function togglePast(btn){
+  const list=$('past-uscite'); const show=list.style.display==='none';
+  list.style.display=show?'block':'none'; btn.classList.toggle('on',show); btn.textContent=show?'Solo prossime':'Prossime';
+  if(show) setTimeout(()=>list.scrollIntoView({behavior:'smooth'}),50);
+}
+function uscitaCard(u){
+  return `<div class="card card-hover event-card ${isFuture(u.data_uscita)?'':'tag-past'}">
+    ${dateChip(u.data_uscita)}
+    <div style="min-width:0">
+      <div class="ev-title">🚴 ${escHTML(u.titolo)}</div>
+      <div class="ev-meta">${fmtLong(u.data_uscita)}${u.luogo_partenza?' · 📍 '+escHTML(u.luogo_partenza):''}${u.ora_ritrovo?' · ⏰ '+u.ora_ritrovo:''}</div>
+      ${u.descrizione?`<p style="font-size:13.5px;color:#475569;margin-top:8px">${escHTML(u.descrizione)}</p>`:''}
+      <div class="badges">${evBadges(u)}</div>
+      ${u.gpx_url?`<div id="map-${u.id}" class="map-container"></div>`:(isFuture(u.data_uscita)?'<div class="map-placeholder">🗺️ Traccia GPX in arrivo</div>':'')}
+      ${isAdmin?actionsHTML('uscita',u.id):''}
+    </div>
+  </div>`;
+}
+function actionsHTML(type,id){
+  return `<div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-sky btn-xs" onclick="editItem('${type}',${id})">✏️ Modifica</button>
+    <button class="btn btn-danger btn-xs" onclick="deleteItem('${type}',${id})">🗑️ Elimina</button></div>`;
+}
+function initMap(elId,gpxUrl){
+  setTimeout(()=>{
+    const el=document.getElementById(elId); if(!el) return;
+    const map=L.map(elId).setView([45.5,9.2],10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
+    new L.GPX(gpxUrl,{async:true,color:'#0d9488',weight:4}).on('loaded',e=>map.fitBounds(e.target.getBounds())).addTo(map);
+  },80);
+}
+
+// ================= GARE =================
+async function renderGare(){
+  const {data}=await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara',{ascending:false});
+  cacheGare=data||[];
+  const futuri=cacheGare.filter(g=>isFuture(g.data_gara)), passati=cacheGare.filter(g=>!isFuture(g.data_gara));
+  $('content-area').innerHTML=`
+    <div class="page-head">
+      <div><h1 class="page-title">🏁 Gare</h1><p class="page-sub">Iscriviti con un click: l'iscrizione è gratuita e reversibile fino a 24h prima.</p></div>
+      <button class="btn btn-violet admin-only" onclick="openEventModal('gara')">➕ Nuova gara</button>
+    </div>
+    <div class="grid">${futuri.length?futuri.map(g=>garaCard(g)).join(''):emptyBox('🏁😴','Nessuna gara imminente','Stiamo preparando il calendario agonistico. Intanto allenati! 💪')}</div>
+    ${passati.length?`<div class="section-title">🗄️ Gare svolte</div><div class="grid">${passati.map(g=>garaCard(g)).join('')}</div>`:''}`;
+}
+function garaCard(g){
+  const isc=(g.iscrizioni||[]); const mio=isIscritto(g);
+  return `<div class="card card-hover event-card ${isFuture(g.data_gara)?'':'tag-past'}" style="border-top:3px solid var(--violet)">
+    ${dateChip(g.data_gara)}
+    <div style="min-width:0">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div><div class="ev-title">🏁 ${escHTML(g.titolo)}</div>
+        <div class="ev-meta">${fmtLong(g.data_gara)}${g.luogo?' · 📍 '+escHTML(g.luogo):''}${g.indirizzo_scadenza?' · 📝 iscrizioni entro il '+fmtDate(g.indirizzo_scadenza):''}</div></div>
+        ${currentUser&&isFuture(g.data_gara)&&!isAdmin?(mio
+          ?`<div style="text-align:right"><span class="badge b-green" style="margin-bottom:6px">✅ Sei iscritto/a</span><br><button class="btn btn-danger btn-sm" onclick="annullaIscrizione(${g.id})">😞 Ritirami</button></div>`
+          :`<button class="btn btn-violet btn-sm" onclick="iscriviti(${g.id},'gara')">💪 Partecipa!</button>`):''}
+      </div>
+      ${g.descrizione?`<p style="font-size:13.5px;color:#475569;margin-top:8px">${escHTML(g.descrizione)}</p>`:''}
+      <div class="badges">${evBadges({...g,data_uscita:g.data_gara})}</div>
+      <div style="margin-top:12px">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Chi ci sarà (${isc.length})</div>
+        <div class="roster">${isc.length?isc.map(i=>`<span class="rider"><span class="avatar" style="background:${avatarColor(i.profiles?.nome)}">${initials(i.profiles?.nome)}</span>${escHTML(i.profiles?.nome||'Anonimo')}</span>`).join(''):'<span style="font-size:13px;color:var(--muted)">Sii il primo a iscriverti ✨</span>'}</div>
+      </div>
+      ${isAdmin?actionsHTML('gara',g.id):''}
+    </div>
+  </div>`;
+}
+async function iscriviti(id,tipo){
+  if(!currentUser){ toast('Accedi prima di iscriverti 🙂',true); openAuthModal('login'); return; }
+  const {error}=await sb.from('iscrizioni').insert({user_id:currentUser.id,gara_id:id});
+  if(error){ if(error.code==='23505'){toast('Sei già iscritto/a!');return} toast('Iscrizione fallita: '+error.message,true); return; }
+  toast('Iscrizione confermata, ci vediamo alla partenza! 🙌'); loadData('gare');
+}
+async function annullaIscrizione(id){
+  const {error}=await sb.from('iscrizioni').delete().eq('user_id',currentUser.id).eq('gara_id',id);
+  if(error) toast('Ritiro non riuscito: '+error.message,true);
+  else{ toast('Iscrizione annullata 👋'); loadData('gare'); }
+}
+
+// ================= BACHECA =================
+async function renderBacheca(){
+  const {data,error}=await sb.from('messaggi').select('id,user_id,testo,created_at,autore:profiles(nome)').order('created_at',{ascending:false}).limit(60);
+  cacheMessaggi=data||[];
+  $('content-area').innerHTML=`
+    <div class="page-head"><div><h1 class="page-title">💬 Bacheca del gruppo</h1>
+    <p class="page-sub">Proponi uscite, chiedi consigli su bici e ricambi, condividi foto e gagliardetti. Regola unica: rispetto sempre. 🤝</p></div></div>
+    ${!currentUser?`<div class="notice n-info">🔑 <a href="#" onclick="openAuthModal('login');return false">Accedi</a> o <a href="#" onclick="openAuthModal('register');return false">registrati</a> per partecipare alla discussione.</div>`:`
+    <div class="card" style="margin-bottom:18px">
+      <form id="msg-form" style="display:flex;gap:10px;align-items:flex-start">
+        <span class="avatar" style="width:38px;height:38px;background:${avatarColor(myProfile?.nome)};margin-top:4px">${initials(myProfile?.nome)}</span>
+        <textarea id="msg-text" maxlength="500" placeholder="Scrivi qualcosa al gruppo… (max 500 caratteri)" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;min-height:60px"></textarea>
+        <button class="btn btn-primary" type="submit">Pubblica</button>
+      </form>
+    </div>`}
+    <div id="feed" class="grid" style="gap:10px">${error?emptyBox('🛠️','Bacheca non disponibile','Esegui il nuovo setup.sql per creare la tabella messaggi.'):''}</div>`;
+  if(!error) drawFeed();
+  const f=$('msg-form'); if(f) f.addEventListener('submit',sendMsg);
+}
+function drawFeed(){
+  const feed=$('feed'); if(!feed) return;
+  if(!cacheMessaggi.length){ feed.innerHTML=emptyBox('📭','Ancora nessun messaggio','Rompi il ghiaccio tu!'); return; }
+  feed.innerHTML=cacheMessaggi.map(m=>`
+    <div class="card" style="padding:14px;display:flex;gap:12px">
+      <span class="avatar" style="width:38px;height:38px;background:${avatarColor(m.autore?.nome)}">${initials(m.autore?.nome)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <b style="font-size:14px">${escHTML(m.autore?.nome||'Anonimo')}</b>
+          <span style="font-size:11.5px;color:var(--muted)">${relTime(m.created_at)}</span>
+          ${(isAdmin||m.user_id===currentUser?.id)?`<button class="btn btn-danger btn-xs" style="margin-left:auto" onclick="deleteMsg(${m.id})">✕</button>`:''}
+        </div>
+        <p style="margin-top:4px;white-space:pre-wrap;font-size:14px">${escHTML(m.testo)}</p>
+      </div>
+    </div>`).join('');
+}
+async function sendMsg(e){
+  e.preventDefault();
+  const txt=$('msg-text').value.trim(); if(!txt) return;
+  const {error}=await sb.from('messaggi').insert({user_id:currentUser.id,testo:txt});
+  if(error) toast('Non riesco a pubblicare: '+error.message,true);
+  else{ $('msg-text').value=''; toast('Messaggio pubblicato! ✨'); renderBacheca(); }
+}
+async function deleteMsg(id){
+  if(!confirm('Eliminare questo messaggio?')) return;
+  const {error}=await sb.from('messaggi').delete().eq('id',id);
+  if(error) toast('Eliminazione fallita ('+error.message+')',true); else renderBacheca();
+}
+
+// ================= CLASSIFICA =================
+async function renderClassifica(){
+  const [{data:uscite},{data:gare},{data:iscr}] = await Promise.all([
+    sb.from('uscite').select('distanza_km,data_uscita'),
+    sb.from('gare').select('id,data_gara'),
+    sb.from('iscrizioni').select('user_id,gara_id')
+  ]);
+  const anno=String(new Date().getFullYear());
+  const kmAnno=(uscite||[]).filter(u=>(u.data_uscita||'').startsWith(anno)).reduce((s,u)=>s+(Number(u.distanza_km)||0),0);
+  // punti gara: partecipazione + podio simulato non disponibile → contiamo le presenze
+  const presenze={}; (iscr||[]).forEach(i=>{presenze[i.user_id]=(presenze[i.user_id]||0)+1});
+  const prof=cacheProfili.length?cacheProfili:(await sb.from('profiles').select('id,nome,is_admin')).data||[];
+  cacheProfili=prof;
+  const rows=prof.map(p=>({nome:p.nome||'Atleta',gare:presenze[p.id]||0,admin:p.is_admin}))
+    .sort((a,b)=>b.gare-a.gare||(a.nome).localeCompare(b.nome));
+  $('content-area').innerHTML=`
+    <div class="page-head"><div><h1 class="page-title">🏆 Classifica & statistiche ${anno}</h1>
+    <p class="page-sub">Presenze alle gare e chilometri proposti dal gruppo. La gloria non si misura in watt, ma quasi.</p></div></div>
+    <div class="stat-grid">
+      ${statCard('📏','#dcfce7',Math.round(kmAnno)+' km','Km in calendario '+anno)}
+      ${statCard('🎟️','#ede9fe',(iscr||[]).length,'Iscrizioni totali')}
+      ${statCard('👑','#ffedd5',prof.filter(p=>p.is_admin).length,'Amministratori')}
+    </div>
+    <div class="card" style="padding:6px 14px 14px">
+      <div class="section-title" style="margin-top:12px">🎖️ Podio presenze gare</div>
+      <table class="data"><thead><tr><th>#</th><th>Atleta</th><th>Gare</th></tr></thead><tbody>
+      ${rows.slice(0,15).map((r,i)=>`<tr><td class="medal">${['🥇','🥈','🥉'][i]||(i+1)}</td><td><span class="rider" style="padding:2px 10px 2px 4px"><span class="avatar" style="width:20px;height:20px;font-size:8.5px;background:${avatarColor(r.nome)}">${initials(r.nome)}</span>${escHTML(r.nome)}${r.admin?' 👑':''}</span></td><td><b>${r.gare}</b></td></tr>`).join('')||'<tr><td colspan="3" style="color:var(--muted)">Nessun dato disponibile.</td></tr>'}
+      </tbody></table>
+      <p class="hint" style="margin-top:10px">ℹ️ Quando il gruppo adotterà i risultati reali (tempi/piazzamenti), la classifica si arricchirà di punti e categorie.</p>
+    </div>`;
+}
+
+// ================= IL GRUPPO =================
+async function renderGruppo(){
+  const prof=cacheProfili.length?cacheProfili:(await sb.from('profiles').select('id,nome,is_admin,bike_tag,created_at')).data||[];
+  cacheProfili=prof;
+  const {data:iscr} = await sb.from('iscrizioni').select('user_id');
+  const presenze={}; (iscr||[]).forEach(i=>{presenze[i.user_id]=(presenze[i.user_id]||0)+1});
+  const sorted=[...prof].sort((a,b)=>(b.is_admin?1:0)-(a.is_admin?1:0)||(presenze[b.id]||0)-(presenze[a.id]||0));
+  $('content-area').innerHTML=`
+    <div class="page-head"><div><h1 class="page-title">👥 Il gruppo</h1><p class="page-sub">${prof.length} atleti tesserati per l'entusiasmo.</p></div></div>
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="font-size:15px;margin-bottom:6px">🤝 Chi siamo</h3>
+      <p style="font-size:13.5px;color:#475569">Pedale Allegro è una community ciclistica amatoriale: uscite su strada il mercoledì e il weekend, granfondo e gare sociali. Tutti i livelli sono benvenuti, l'unica regola è non lasciare nessuno indietro (tranne chi parte a tutta il sabato 😅).</p>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))">
+      ${sorted.map(p=>`<div class="card card-hover" style="display:flex;gap:12px;align-items:center;padding:14px">
+        <span class="avatar" style="width:44px;height:44px;font-size:16px;background:${avatarColor(p.nome)}">${initials(p.nome)}</span>
+        <div style="min-width:0">
+          <b style="font-size:14px">${escHTML(p.nome||'Atleta')} ${p.is_admin?'👑':''}</b>
+          <div style="font-size:12px;color:var(--muted)">${escHTML(p.bike_tag||'Biker 🚴')}</div>
+          <div style="font-size:11.5px;margin-top:3px"><span class="badge ${p.is_admin?'b-rose':'b-teal'}" style="font-size:10px">${p.is_admin?'Staff':'Membro'} · ${presenze[p.id]||0} gare</span></div>
+        </div></div>`).join('')}
+    </div>`;
+}
+
+// ================= AREA ADMIN =================
+async function renderAdmin(){
+  const [{data:uscite},{data:gare},{data:prof},{data:messaggi}] = await Promise.all([
+    sb.from('uscite').select('*').order('data_uscita',{ascending:false}),
+    sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara',{ascending:false}),
+    sb.from('profiles').select('id,nome,is_admin'),
+    sb.from('messaggi').select('id,testo,created_at,user_id,autore:profiles(nome)').order('created_at',{ascending:false}).limit(20)
+  ]);
+  cacheUscite=uscite||[]; cacheGare=gare||[]; cacheProfili=prof||[];
+  const adminCount=(prof||[]).filter(p=>p.is_admin).length;
+  const prossimi=[...(uscite||[]).map(u=>({t:'uscita',titolo:u.titolo,data:u.data_uscita})),...(gare||[]).map(g=>({t:'gara',titolo:g.titolo,data:g.data_gara}))].filter(e=>isFuture(e.data)).sort((a,b)=>a.data.localeCompare(b.data));
+  $('content-area').innerHTML=`
+    <div class="page-head">
+      <div><h1 class="page-title">🛡️ Pannello di controllo</h1><p class="page-sub">Accesso riservato agli amministratori · protetto da RLS lato database 🔒</p></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="openEventModal('uscita')">➕ Uscita</button>
+        <button class="btn btn-violet" onclick="openEventModal('gara')">➕ Gara</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      ${statCard('🚴','#ccfbf1',(uscite||[]).length,'Uscite totali')}
+      ${statCard('🏁','#ede9fe',(gare||[]).length,'Gare totali')}
+      ${statCard('👥','#e0f2fe',(prof||[]).length,'Membri registrati')}
+      ${statCard('🗓️','#ffedd5',prossimi.length,'Prossimi eventi')}
+      ${statCard('💬','#dcfce7',(messaggi||[]).length,'Messaggi recenti')}
     </div>
 
-    <!-- Modale Admin (Nascosto di default) -->
-    <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-md card-anim">
-            <h3 id="modal-title" class="text-xl font-extrabold mb-4 text-orange-600"></h3>
-            <form id="admin-form" class="space-y-4">
-                <input type="hidden" id="form-type">
-                <input type="hidden" id="form-id">
-                <input type="text" id="f-titolo" placeholder="✨ Titolo" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <input type="date" id="f-data" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <input type="text" id="f-extra" placeholder="Descrizione o Luogo" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                <div id="gpx-input-area" class="hidden">
-                    <label class="block text-sm font-semibold mb-1">📍 Traccia GPX:</label>
-                    <input type="file" id="f-gpx" accept=".gpx" class="w-full p-2 border-2 border-dashed border-orange-200 rounded-xl">
-                    <p id="gpx-stats" class="hidden mt-2 text-sm font-bold text-emerald-600 bg-emerald-50 rounded-xl px-3 py-2"></p>
-                </div>
-                <div class="flex gap-2">
-                    <div class="relative flex-1">
-                        <input type="number" id="f-distanza" step="0.1" min="0" placeholder="Distanza (es. 45,5)" class="w-full p-3 pr-10 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                        <span class="absolute right-3 top-3.5 text-xs font-bold text-gray-400">km</span>
-                    </div>
-                    <div class="relative flex-1">
-                        <input type="number" id="f-dislivello" step="1" min="0" placeholder="Dislivello" class="w-full p-3 pr-10 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
-                        <span class="absolute right-3 top-3.5 text-xs font-bold text-gray-400">m</span>
-                    </div>
-                </div>
-                <p id="gpx-auto-note" class="hidden text-xs text-gray-500 -mt-2">🤖 Valori calcolati dal GPX — puoi comunque modificarli a mano.</p>
-                <div class="flex gap-2 pt-2">
-                    <button type="submit" class="btn-friendly bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600">💾 Salva</button>
-                    <button type="button" onclick="closeModal()" class="btn-friendly bg-gray-100 text-gray-600 px-5 py-2 rounded-full font-bold hover:bg-gray-200">Annulla</button>
-                </div>
-            </form>
-        </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start">
+      <div class="card">
+        <div class="section-title" style="margin-top:0">🚴 Gestione uscite</div>
+        <ul class="list-plain">${(uscite||[]).slice(0,20).map(u=>`<li><span><b style="font-size:13px">${escHTML(u.titolo)}</b><br><span style="font-size:11.5px;color:var(--muted)">${fmtDate(u.data_uscita)}${u.gpx_url?' · ✅ GPX':''}</span></span>
+          <span style="display:flex;gap:5px"><button class="btn btn-sky btn-xs" onclick="editItem('uscita',${u.id})">✏️</button><button class="btn btn-danger btn-xs" onclick="deleteItem('uscita',${u.id})">🗑️</button></span></li>`).join('')||'<li>Nessuna uscita.</li>'}</ul>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-top:0">🏁 Gestione gare</div>
+        <ul class="list-plain">${(gare||[]).slice(0,20).map(g=>`<li><span><b style="font-size:13px">${escHTML(g.titolo)}</b><br><span style="font-size:11.5px;color:var(--muted)">${fmtDate(g.data_gara)} · 🎟️ ${(g.iscrizioni||[]).length} iscritti</span></span>
+          <span style="display:flex;gap:5px"><button class="btn btn-sky btn-xs" onclick="editItem('gara',${g.id})">✏️</button><button class="btn btn-danger btn-xs" onclick="deleteItem('gara',${g.id})">🗑️</button></span></li>`).join('')||'<li>Nessuna gara.</li>'}</ul>
+      </div>
     </div>
 
-    <script>
-        // --- CONFIGURAZIONE: INSERISCI QUI I TUOI DATI DI SUPABASE ---
-        const SUPABASE_URL = 'https://wrcvolbhjpzyraooldmt.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_WLlo4psCEw3dkah1HTOQhw_Gxpu4A_-';
-        // -------------------------------------------------------------
-
-        // URL del tuo sito: serve per i link di conferma email di Supabase.
-        // Metti qui l'indirizzo esatto da cui apri il portale (es. https://iltuosito.vercel.app)
-        // e aggiungilo anche in Supabase → Authentication → URL Configuration → Redirect URLs.
-        const SITE_URL = window.location.origin + window.location.pathname;
-
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-            auth: {
-                flowType: 'implicit',                    // login classico con token nell'URL: compatibile con i link di conferma/recovery
-                detectSessionInUrl: true,                // cattura il token dal link e crea la sessione automaticamente
-                redirectTo: SITE_URL                     // dopo la conferma torna qui (deve essere tra i Redirect URLs in Supabase)
-            }
-        });
-        let currentUser = null;
-        let isAdmin = false;
-        let profileMissing = false; // true se la tabella profiles non ha una riga per l'utente loggato
-        let signUpPendingUser = null; // utente appena registrato in attesa di conferma email
-
-        // Gestione UI e Messaggi
-        const showMsg = (text, type = 'success') => {
-            const msg = document.getElementById('msg');
-            msg.textContent = (type === 'success' ? '🎉 ' : '😅 ') + text;
-            msg.className = `mb-4 p-3 rounded-xl font-semibold card-anim ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-            msg.classList.remove('hidden');
-            setTimeout(() => msg.classList.add('hidden'), 4000);
-        };
-
-        // --- AUTENTICAZIONE ---
-        async function checkUser() {
-            // 0) Pulizia/recupero da token presenti nell'URL (link di conferma, errori vecchi, ecc.)
-            await salvageSessionFromUrl();
-
-            // 1) Se nel link è presente un token/code di conferma email, completiamo qui lo scambio.
-            if (window.location.hash.includes('access_token') || window.location.search.includes('code=')) {
-                try {
-                    const { data, error } = await sb.sessionFromUrl(window.location.href);
-                    if (error) console.warn('sessionFromUrl:', error.message);
-                    else if (data.session) showMsg('Email confermata! Benvenuto/a nella community 🎉');
-                    else showMsg('Link di conferma elaborato, ora puoi accedere. ✅');
-                } catch (e) { console.warn(e); }
-                // puliamo l'URL dal token, così ricaricando non dà errori
-                history.replaceState(null, '', window.location.pathname + window.location.search);
-            }
-
-            // 2) Recovery password: se il link conteneva type=recovery, impostiamo subito una nuova password
-            if (window.location.hash.includes('type=recovery')) {
-                const nuova = prompt('Password recuperata! Scegli una nuova password (almeno 6 caratteri):');
-                if (nuova && nuova.length >= 6) {
-                    const { error } = await sb.auth.updateUser({ password: nuova });
-                    if (error) showMsg(error.message, 'error');
-                    else showMsg('Password aggiornata! Ora sei dentro. 🔓');
-                }
-            }
-
-            // 3) Ricarichiamo la sessione e aggiorniamo la UI
-            const { data: { session } } = await sb.auth.getSession();
-            currentUser = session?.user ?? null;
-            renderAuthUI();
-            if (currentUser) await checkRole();
-            loadData();
-        }
-
-        // Recupera la sessione ANCHE da un hash deprecato (es. ?error_code=...#access_token=...)
-        // e pulisce l'URL: evita che un token vecchio blocchi il login successivo ("not logged in").
-        function salvageSessionFromUrl() {
-            return new Promise((resolve) => {
-                try {
-                    const h = window.location.hash || '';
-                    if (h.includes('access_token') && !h.includes('error')) {
-                        const p = new URLSearchParams(h.slice(1));
-                        const at = p.get('access_token'), rt = p.get('refresh_token');
-                        if (at) {
-                            const user = JSON.parse(localStorage.getItem('sb-wrcvolbhjpzyraooldmt-auth-token') || 'null');
-                            if (user?.currentSession?.access_token === at) { resolve(true); return; } // già salvata dal client
-                            sb.auth.setSession({ access_token: at, refresh_token: rt }).then(() => resolve(true));
-                            history.replaceState(null, '', window.location.pathname + window.location.search);
-                            return;
-                        }
-                    }
-                    if (window.location.search.includes('error=')) {
-                        history.replaceState(null, '', window.location.pathname); // rimuove errori vecchi dall'URL
-                    }
-                } catch (e) { console.warn(e); }
-                resolve(false);
-            });
-        }
-
-        async function checkRole() {
-            profileMissing = false;
-            const { data, error } = await sb.from('profiles').select('is_admin').eq('id', currentUser.id).maybeSingle();
-            if (error) {
-                console.warn('Errore lettura profilo:', error.message);
-                showMsg('Attenzione: errore leggendo il tuo profilo (' + error.message + ').', 'error');
-            } else if (!data) {
-                // L'utente esiste in Auth ma non ha la riga in profiles (trigger mancante o utente creato prima dello script SQL):
-                // la creiamo al volo, altrimenti non potrà mai diventare admin / iscriversi.
-                profileMissing = true;
-                const { error: insErr } = await sb.from('profiles').insert({ id: currentUser.id, nome: currentUser.user_metadata?.nome || 'Atleta', is_admin: false });
-                if (insErr) {
-                    console.warn('Auto-creazione profilo fallita:', insErr.message);
-                    showMsg('Il tuo profilo non è ancora completo: chiedi a un admin di crearlo (tabella "profiles").', 'error');
-                } else {
-                    profileMissing = false;
-                    showMsg('Profilo creato! Ora sei dei nostri. 🚴');
-                }
-            }
-            isAdmin = data?.is_admin || false;
-            renderAuthUI();
-        }
-
-        function renderAuthUI() {
-            const area = document.getElementById('auth-area');
-            const adminBtns = document.getElementById('admin-btns');
-            const adminTab = document.getElementById('tab-admin');
-            if (!currentUser) {
-                // Se l'utente si è appena registrato ma deve confermare l'email: avvisalo con chiarezza
-                const pendingUser = signUpPendingUser;
-                area.innerHTML = `
-                    <button onclick="openAuthModal('login')" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Login</button>
-                    <button onclick="openAuthModal('register')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full font-bold shadow">📝 Registrati</button>`;
-                adminBtns.classList.add('hidden');
-                adminTab.classList.add('hidden');
-                if (pendingUser) {
-                    const box = document.getElementById('confirm-box');
-                    if (!box) {
-                        const div = document.createElement('div');
-                        div.id = 'confirm-box';
-                        div.className = 'mb-4 p-4 rounded-xl bg-sky-100 text-sky-900 text-sm font-semibold card-anim';
-                        div.innerHTML = '📬 <b>Ultimo passo!</b> Account creato per <b>' + (pendingUser.email || '') + '</b>.<br>' +
-                            'Controlla la tua casella di posta e clicca il link di conferma che ti ha inviato Supabase, poi ricarica la pagina e accedi. 🚴';
-                        document.querySelector('main').prepend(div);
-                    }
-                }
-            } else {
-                area.innerHTML = `<span class="text-sm md:text-base font-semibold">Ciao ${currentUser.user_metadata?.nome || 'Atleta'}! 👋</span> <button onclick="logout()" class="btn-friendly bg-white/20 px-3 py-1 rounded-full text-sm hover:bg-white/30">Esci</button>`;
-                if (isAdmin) {
-                    adminBtns.innerHTML = `
-                        <button onclick="openModal('uscita')" class="btn-friendly bg-emerald-500 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow">➕ Uscita</button>
-                        <button onclick="openModal('gara')" class="btn-friendly bg-violet-500 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow">➕ Gara</button>
-                    `;
-                    adminBtns.classList.remove('hidden');
-                    // Mostra la scheda dell'Area Riservata agli amministratori
-                    adminTab.classList.remove('hidden');
-                    const hint = document.getElementById('admin-hint');
-                    if (hint) hint.remove();
-                } else {
-                    adminBtns.classList.add('hidden');
-                    adminTab.classList.add('hidden');
-                    // Spieghiamo SUBITO perché non vede i pulsanti admin, così non sembra "non succeda nulla"
-                    const hint = document.getElementById('admin-hint');
-                    if (!hint) {
-                        const div = document.createElement('div');
-                        div.id = 'admin-hint';
-                        div.className = 'mb-4 p-4 rounded-xl bg-amber-100 text-amber-900 text-sm font-semibold card-anim';
-                        div.innerHTML = '✅ Sei loggato, tutto regolare! Ma al tuo account <b>' + (currentUser.email || '') +
-                            '</b> non risulta il ruolo <b>admin</b>, quindi non vedi i pulsanti ➕ Uscita / ➕ Gara.<br>' +
-                            'Per ottenerlo: dashboard Supabase → <b>SQL Editor</b> ed esegui:<br>' +
-                            '<code class="bg-white px-2 py-1 rounded text-xs block mt-1 break-all">update public.profiles set is_admin = true where id = \'' + currentUser.id + '\';</code>' +
-                            'Poi ricarica questa pagina e vedrai i pulsanti per aggiungere contenuti. 🚀';
-                        document.querySelector('main').prepend(div);
-                    }
-                }
-            }
-            if (currentUser && !profileMissing) {
-                const h = document.getElementById('admin-hint');
-                if (h && isAdmin) h.remove();
-            }
-        }
-
-        // --- MODALE LOGIN / REGISTRAZIONE ---
-        function openAuthModal(mode) {
-            const savedNome = localStorage.getItem('pa_nome') || currentUser?.user_metadata?.nome || '';
-            document.getElementById('auth-modal').classList.remove('hidden');
-            document.getElementById('a-nome').value = savedNome;
-            document.getElementById('a-email').value = '';
-            document.getElementById('a-password').value = '';
-            hideAuthError();
-            setAuthMode(mode);
-            setTimeout(() => document.getElementById('a-email').focus(), 50);
-        }
-
-        function closeAuthModal() {
-            document.getElementById('auth-modal').classList.add('hidden');
-        }
-
-        // Chiusura modale auth: click sullo sfondo ombreggiato o tasto ESC
-        document.getElementById('auth-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'auth-modal') closeAuthModal();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !document.getElementById('auth-modal').classList.contains('hidden')) closeAuthModal();
-        });
-
-        function toggleAuthMode() {
-            setAuthMode(document.getElementById('auth-mode').value === 'login' ? 'register' : 'login');
-        }
-
-        function setAuthMode(mode) {
-            document.getElementById('auth-mode').value = mode;
-            const nomeInput = document.getElementById('a-nome');
-            if (mode === 'login') {
-                document.getElementById('auth-modal-title').textContent = '🔑 Accedi';
-                document.getElementById('auth-modal-sub').textContent = 'Bentornato/a! Inserisci email e password.';
-                document.getElementById('auth-submit-btn').textContent = '🔑 Login';
-                document.getElementById('auth-switch-label').textContent = 'Non hai ancora un account?';
-                document.getElementById('auth-switch-btn').textContent = 'Registrati';
-                nomeInput.classList.add('hidden'); // al login il nome non serve
-                nomeInput.required = false;
-            } else {
-                document.getElementById('auth-modal-title').textContent = '📝 Registrati';
-                document.getElementById('auth-modal-sub').textContent = 'Entra nella community: ci vogliono 30 secondi! 🚴';
-                document.getElementById('auth-submit-btn').textContent = '📝 Crea account';
-                document.getElementById('auth-switch-label').textContent = 'Hai già un account?';
-                document.getElementById('auth-switch-btn').textContent = 'Accedi';
-                nomeInput.classList.remove('hidden');
-                nomeInput.required = true;
-                if (!nomeInput.value) nomeInput.value = localStorage.getItem('pa_nome') || '';
-            }
-        }
-
-        function showAuthError(text) {
-            const el = document.getElementById('auth-error');
-            el.textContent = '😅 ' + text;
-            el.classList.remove('hidden');
-        }
-
-        function hideAuthError() {
-            document.getElementById('auth-error').classList.add('hidden');
-        }
-
-        document.getElementById('auth-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            hideAuthError();
-            const mode = document.getElementById('auth-mode').value;
-            const email = document.getElementById('a-email').value.trim();
-            const password = document.getElementById('a-password').value;
-            const btn = document.getElementById('auth-submit-btn');
-            btn.disabled = true;
-            try {
-                if (mode === 'login') {
-                    await doLogin(email, password);
-                } else {
-                    await doRegister(email, password);
-                }
-            } finally {
-                btn.disabled = false;
-            }
-        });
-
-        async function doLogin(email, password) {
-            const { error: loginError } = await sb.auth.signInWithPassword({ email, password });
-            if (!loginError) {
-                closeAuthModal();
-                await checkUser();
-                showMsg('Benvenuto/a di nuovo! 🚴');
-                return;
-            }
-            const lm = (loginError.message || '').toLowerCase();
-            if (lm.includes('invalid login') || lm.includes('invalid credentials') || lm.includes('not found')) {
-                showAuthError('Email o password non corretti, oppure l\'account non esiste. Prova a registrarti!');
-            } else if (lm.includes('confirm')) {
-                signUpPendingUser = { email };
-                showAuthError('Devi ancora confermare l\'email: apri il link che ti abbiamo inviato, poi riprova ad accedere. 📬');
-                renderAuthUI();
-            } else {
-                showAuthError(loginError.message);
-            }
-        }
-
-        async function doRegister(email, password) {
-            const nome = document.getElementById('a-nome').value.trim() || 'Utente';
-            const { data: signUpData, error: regError } = await sb.auth.signUp({
-                email, password,
-                options: { data: { nome }, emailRedirectTo: SITE_URL }
-            });
-            if (regError) {
-                const msg = (regError.message || '').toLowerCase();
-                if (msg.includes('rate limit')) {
-                    showAuthError("Supabase ha momentaneamente bloccato l'invio di email di conferma (limite raggiunto). ⏳ Riprova tra un po', oppure vai nella dashboard Supabase → Authentication → Sign In / Up e DISATTIVA 'Confirm email': a quel punto ti basterà premere di nuovo 'Login' ed entrerai subito. 🙌");
-                } else if (msg.includes('already registered') || msg.includes('already exists')) {
-                    showAuthError('Questo account esiste già: passa al Login. 🔁');
-                } else {
-                    showAuthError(regError.message);
-                }
-                return;
-            }
-            localStorage.setItem('pa_nome', nome); // il nome viene ricordato: mai più richiesto!
-            if (signUpData.session) {
-                // Conferma email disabilitata: sessione immediata
-                closeAuthModal();
-                showMsg('Evviva! Account creato, benvenuto/a nella community! 🚴');
-                await checkUser();
-            } else {
-                signUpPendingUser = { email };
-                closeAuthModal();
-                showMsg("Registrato! Controlla la tua email per confermare l'account, poi premi di nuovo 'Login'. 📬", 'error');
-                renderAuthUI();
-            }
-        }
-
-        // --- DIAGNOSTICA: segnala in alto eventuali errori Supabase (es. tabelle mancanti) ---
-        async function checkSchema() {
-            const problems = [];
-            for (const t of ['uscite', 'gare', 'profiles']) {
-                const { error } = await sb.from(t).select('*').limit(1);
-                if (error && (error.code === '42P01' || error.code === 'PGRST205')) problems.push(t);
-            }
-            if (problems.length) {
-                const box = document.createElement('div');
-                box.className = 'mb-4 p-4 rounded-xl bg-yellow-100 text-yellow-900 text-sm font-semibold card-anim';
-                box.innerHTML = '⚠️ Nel database Supabase mancano ancora le tabelle: <b>' + problems.join(', ') + '</b>.<br>' +
-                    'Apri la dashboard Supabase → <b>SQL Editor</b> ed esegui lo script di creazione (setup.sql del progetto), poi ricarica questa pagina.';
-                document.querySelector('main').prepend(box);
-            }
-        }
-
-        async function logout() {
-            await sb.auth.signOut();
-            isAdmin = false;
-            currentUser = null;
-            location.reload();
-        }
-
-        // --- CARICAMENTO DATI ---
-        let currentTab = 'uscite';
-        function switchTab(tab) {
-            // L'Area Riservata è accessibile solo agli amministratori (controllo anche lato client)
-            if (tab === 'admin' && !isAdmin) { showMsg('Questa area è riservata agli amministratori. 🛡️', 'error'); return; }
-            currentTab = tab;
-            const active = 'btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600';
-            const inactive = 'btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600';
-            document.getElementById('tab-uscite').className = tab === 'uscite' ? active : inactive;
-            document.getElementById('tab-gare').className = tab === 'gare' ? active : inactive;
-            const adminTabEl = document.getElementById('tab-admin');
-            adminTabEl.className = tab === 'admin'
-                ? active.replace('text-orange-600', 'text-rose-600') + ' ' + (isAdmin ? '' : 'hidden')
-                : inactive + (isAdmin ? '' : ' hidden');
-            loadData(tab);
-        }
-
-        async function loadData(tab = 'uscite') {
-            const area = document.getElementById('content-area');
-            if (tab === 'admin') { await loadAdminArea(); return; }
-            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> <span class="text-sm text-gray-500">Caricamento, un attimo... ⏳</span></div>';
-
-            if (tab === 'uscite') {
-                const { data } = await sb.from('uscite').select('*').order('data_uscita', { ascending: false });
-                cacheUscite = data || [];
-                area.innerHTML = '<div class="space-y-4" id="list-uscite"></div>';
-                if (data && data.length > 0) data.forEach(renderUscita);
-                else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🚴‍♂️💨</p><p class="text-gray-500 font-semibold">Ancora nessuna uscita programmata!</p><p class="text-sm text-gray-400 mt-1">Ritorna presto a trovarci, ne vedremo delle belle. 😉</p></div>';
-            } else {
-                const { data } = await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara', { ascending: false });
-                cacheGare = data || [];
-                area.innerHTML = '<div class="space-y-4" id="list-gare"></div>';
-                if (data && data.length > 0) data.forEach(renderGara);
-                else area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🏁😴</p><p class="text-gray-500 font-semibold">Nessuna gara in programma al momento.</p><p class="text-sm text-gray-400 mt-1">Ma non temere: ci stiamo allenando per te! 💪</p></div>';
-            }
-        }
-
-        // Pulsanti admin (modifica/elimina) mostrati solo se isAdmin
-        function adminActions(type, id) {
-            if (!isAdmin) return '';
-            return `<div class="flex gap-2 mt-3">
-                <button onclick="editItem('${type}', ${id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
-                <button onclick="deleteItem('${type}', ${id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>
-            </div>`;
-        }
-
-        // Cache dei dati caricati, per riaprire il modale già compilato in modifica
-        let cacheUscite = [], cacheGare = [];
-
-        // Badge distanza/dislivello per card uscite e gare
-        function statsBadges(item) {
-            const parts = [];
-            if (item.distanza_km != null) parts.push(`<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold">📏 ${Number(item.distanza_km).toLocaleString('it-IT')} km</span>`);
-            if (item.dislivello_m != null) parts.push(`<span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold">⛰️ ${Number(item.dislivello_m).toLocaleString('it-IT')} m dislivello</span>`);
-            return parts.length ? `<div class="flex flex-wrap gap-2 mt-2">${parts.join('')}</div>` : '';
-        }
-
-        // --- RENDERING ---
-        function renderUscita(item) {
-            const div = document.createElement('div');
-            div.className = "bg-white p-5 rounded-2xl shadow border-l-4 border-orange-400 card-anim";
-            div.innerHTML = `
-                <h3 class="font-extrabold text-lg text-gray-800">🚴 ${item.titolo}</h3>
-                <p class="text-sm text-gray-500 mt-1">📅 ${item.data_uscita} ${item.descrizione ? '| ' + item.descrizione : ''}</p>
-                ${statsBadges(item)}
-                ${adminActions('uscita', item.id)}
-                <div id="map-${item.id}" class="map-container"></div>
-            `;
-            document.getElementById('list-uscite').appendChild(div);
-            
-            // Mappa GPX
-            if (item.gpx_url) {
-                setTimeout(() => {
-                    const map = L.map(`map-${item.id}`).setView([45.5, 9.2], 10); // Default su Italia
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
-                    new L.GPX(item.gpx_url, { async: true }).on('loaded', function(e) {
-                        map.fitBounds(e.target.getBounds());
-                    }).addTo(map);
-                }, 100);
-            } else {
-                document.getElementById(`map-${item.id}`).innerHTML = '<div class="flex items-center justify-center h-full bg-orange-50 text-gray-400 text-sm font-semibold"><span>🗺️ La traccia arriverà presto, stay tuned!</span></div>';
-            }
-        }
-
-        async function renderGara(item) {
-            const iscritti = item.iscrizioni || [];
-            const isIscritto = currentUser && iscritti.some(i => i.user_id === currentUser.id);
-            
-            const div = document.createElement('div');
-            div.className = "bg-white p-5 rounded-2xl shadow border-l-4 border-violet-400 card-anim";
-            div.innerHTML = `
-                <div class="flex justify-between items-start gap-2">
-                    <div>
-                        <h3 class="font-extrabold text-lg text-gray-800">🏁 ${item.titolo}</h3>
-                        <p class="text-sm text-gray-500 mt-1">📅 ${item.data_gara} | 📍 ${item.luogo || 'Da definire'}</p>
-                        ${statsBadges(item)}
-                    </div>
-                    ${currentUser && !isAdmin ? (
-                        isIscritto 
-                        ? `<button onclick="disiscriviti(${item.id})" class="btn-friendly bg-red-50 text-red-500 px-4 py-1.5 rounded-full text-sm font-bold border border-red-200">😞 Ritiro</button>`
-                        : `<button onclick="iscriviti(${item.id})" class="btn-friendly bg-violet-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">💪 Partecipa!</button>`
-                    ) : ''}
-                </div>
-                ${adminActions('gara', item.id)}
-                <div class="mt-4">
-                    <h4 class="font-bold text-sm mb-2 text-gray-600">Chi partecipa? (${iscritti.length}) 🎟️</h4>
-                    <div class="flex flex-wrap gap-2">
-                        ${iscritti.length > 0 ? iscritti.map(i => `<span class="bg-violet-50 text-violet-700 px-3 py-1 rounded-full text-sm font-semibold">😊 ${i.profiles?.nome || 'Anonimo'}</span>`).join('') : '<span class="text-sm text-gray-400">Sii il primo a iscriverti, ti aspettiamo! ✨</span>'}
-                    </div>
-                </div>
-            `;
-            document.getElementById('list-gare').appendChild(div);
-        }
-
-        // --- AZIONI UTENTE ---
-        async function iscriviti(garaId) {
-            const { error } = await sb.from('iscrizioni').insert({ user_id: currentUser.id, gara_id: garaId });
-            if (error) showMsg("Ops! Qualcosa è andato storto con l'iscrizione.", 'error');
-            else { showMsg("Evviva! Iscrizione confermata, ci vediamo lì! 🙌"); loadData('gare'); }
-        }
-
-        async function disiscriviti(garaId) {
-            const { error } = await sb.from('iscrizioni').delete().eq('user_id', currentUser.id).eq('gara_id', garaId);
-            if (error) showMsg("Ops! Non siamo riusciti ad annullare l'iscrizione.", 'error');
-            else { showMsg("Iscrizione annullata. Ti aspettiamo alla prossima! 👋"); loadData('gare'); }
-        }
-
-// --- CALCOLO DISTANZA/DISLIVELLO DAL GPX ---
-        function haversine(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // raggi terrestre in metri
-            const toRad = d => d * Math.PI / 180;
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
-            return 2 * R * Math.asin(Math.sqrt(a));
-        }
-
-        // Estrae i punti (lat, lon, ele) da una stringa GPX, senza dipendere dal namespace
-        function parseGpxPoints(text) {
-            const doc = new DOMParser().parseFromString(text, 'application/xml');
-            if (doc.querySelector('parsererror')) throw new Error('File GPX non valido o corrotto.');
-            const pts = [];
-            doc.getElementsByTagName('*').forEach(node => {
-                const tag = node.tagName.toLowerCase();
-                if (tag === 'trkpt' || tag === 'rtept' || tag === 'wpt') {
-                    const lat = parseFloat(node.getAttribute('lat'));
-                    const lon = parseFloat(node.getAttribute('lon'));
-                    if (!isNaN(lat) && !isNaN(lon)) {
-                        let ele = null;
-                        for (const child of node.children) {
-                            if (child.tagName.toLowerCase() === 'ele') {
-                                const v = parseFloat(child.textContent);
-                                if (!isNaN(v)) ele = v;
-                            }
-                        }
-                        pts.push({ lat, lon, ele });
-                    }
-                }
-            });
-            if (pts.length < 2) throw new Error('Il GPX non contiene abbastanza punti per il calcolo.');
-            return pts;
-        }
-
-        // Distanza totale (m) e dislivello positivo cumulativo (m)
-        function calcGpxStats(pts) {
-            let dist = 0, gain = 0;
-            for (let i = 1; i < pts.length; i++) {
-                dist += haversine(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
-                const prev = pts[i-1].ele, cur = pts[i].ele;
-                if (prev != null && cur != null) {
-                    const d = cur - prev;
-                    if (d > 0.5) gain += d; // filtro micro-rumore GPS
-                }
-            }
-            return { distanceM: dist, elevationGainM: gain };
-        }
-
-        async function analyzeGpxFile(file) {
-            const text = await file.text();
-            const pts = parseGpxPoints(text);
-            const stats = calcGpxStats(pts);
-            const hasEle = pts.some(p => p.ele != null);
-            document.getElementById('f-distanza').value = (stats.distanceM / 1000).toFixed(1);
-            if (hasEle) {
-                document.getElementById('f-dislivello').value = Math.round(stats.elevationGainM);
-            } else {
-                document.getElementById('f-dislivello').value = '';
-                showMsg('Il GPX non contiene dati di quota (ele): ho calcolato la distanza, inserisci il dislivello a mano. 🙂', 'error');
-            }
-            const statsEl = document.getElementById('gpx-stats');
-            statsEl.textContent = `🤖 Calcolato dal GPX: 📏 ${(stats.distanceM/1000).toLocaleString('it-IT', {maximumFractionDigits:1})} km` +
-                                  (hasEle ? ` · ⛰️ ${Math.round(stats.elevationGainM).toLocaleString('it-IT')} m dislivello` : '');
-            statsEl.classList.remove('hidden');
-            document.getElementById('gpx-auto-note').classList.remove('hidden');
-        }
-
-        document.getElementById('f-gpx').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            const statsEl = document.getElementById('gpx-stats');
-            statsEl.classList.add('hidden');
-            document.getElementById('gpx-auto-note').classList.add('hidden');
-            if (!file) return;
-            analyzeGpxFile(file).catch(err => {
-                console.error('gpx parse:', err);
-                showMsg('Ops, non sono riuscito a leggere il GPX: ' + err.message, 'error');
-            });
-        });
-
-// --- AREA RISERVATA AMMINISTRATORI ---
-        async function loadAdminArea() {
-            const area = document.getElementById('content-area');
-            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> <span class="text-sm text-gray-500">Caricamento dashboard... ⏳</span></div>';
-
-            const [risUscite, risGare, risProf] = await Promise.all([
-                sb.from('uscite').select('*').order('data_uscita', { ascending: false }),
-                sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara', { ascending: false }),
-                sb.from('profiles').select('id, nome, is_admin')
-            ]);
-
-            if (risUscite.error || risGare.error) {
-                area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🛠️</p><p class="text-gray-500 font-semibold">Non riesco a leggere i dati del database.</p><p class="text-sm text-gray-400 mt-1">' + ((risUscite.error || risGare.error).message || '') + '</p></div>';
-                return;
-            }
-
-            const uscite = risUscite.data || [];
-            const gare = risGare.data || [];
-            const profili = risProf.data || [];
-            cacheProfili = profili;
-            const adminCount = profili.filter(p => p.is_admin).length;
-            const prossimiEventi = [...uscite.map(u => ({ t: 'uscita', titolo: u.titolo, data: u.data_uscita })),
-                                    ...gare.map(g => ({ t: 'gara', titolo: g.titolo, data: g.data_gara }))]
-                                    .filter(e => e.data && e.data >= todayISO()).sort((a, b) => a.data.localeCompare(b.data));
-
-            area.innerHTML = `
-                <!-- Intestazione -->
-                <div class="bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl shadow p-5 mb-4 card-anim">
-                    <h2 class="text-xl font-extrabold">🛡️ Area Riservata agli Amministratori</h2>
-                    <p class="text-sm text-orange-100 mt-1">Solo chi ha il ruolo <b>admin</b> può vedere e gestire questa sezione. I dati sono protetti anche dal database (RLS). 🔒</p>
-                </div>
-
-                <!-- Statistiche -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🚴</p><p class="text-2xl font-extrabold text-orange-600">${uscite.length}</p><p class="text-xs font-bold text-gray-500">Uscite</p></div>
-                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🏁</p><p class="text-2xl font-extrabold text-violet-600">${gare.length}</p><p class="text-xs font-bold text-gray-500">Gare</p></div>
-                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">👥</p><p class="text-2xl font-extrabold text-emerald-600">${profili.length}</p><p class="text-xs font-bold text-gray-500">Iscritti</p></div>
-                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🗓️</p><p class="text-2xl font-extrabold text-sky-600">${prossimiEventi.length}</p><p class="text-xs font-bold text-gray-500">Prossimi eventi</p></div>
-                </div>
-
-                ${prossimiEventi.length ? `
-                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim border-l-4 border-sky-400">
-                    <h3 class="font-extrabold text-gray-800 mb-2">📅 Prossimi appuntamenti</h3>
-                    <ul class="space-y-1 text-sm text-gray-600">
-                        ${prossimiEventi.slice(0, 5).map(e => `<li>${e.t === 'uscita' ? '🚴' : '🏁'} <b>${escHTML(e.titolo)}</b> — ${formatDate(e.data)}</li>`).join('')}
-                    </ul>
-                </div>` : ''}
-
-                <!-- Gestione Uscite -->
-                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="font-extrabold text-gray-800">🚴 Gestione Uscite</h3>
-                        <button onclick="openModal('uscita')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">➕ Nuova</button>
-                    </div>
-                    <div id="adm-list-uscite" class="space-y-2"></div>
-                </div>
-
-                <!-- Gestione Gare -->
-                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="font-extrabold text-gray-800">🏁 Gestione Gare</h3>
-                        <button onclick="openModal('gara')" class="btn-friendly bg-violet-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">➕ Nuova</button>
-                    </div>
-                    <div id="adm-list-gare" class="space-y-2"></div>
-                </div>
-
-                <!-- Gestione Admin -->
-                <div class="bg-white rounded-2xl shadow p-5 card-anim">
-                    <h3 class="font-extrabold text-gray-800 mb-1">👑 Ruoli amministratori <span class="text-sm font-bold text-rose-500">(${adminCount})</span></h3>
-                    <p class="text-xs text-gray-500 mb-3">Assegna o rimuovi il ruolo admin ai membri della community (attenzione: non puoi rimuovere te stesso, altrimenti resteresti senza admin!).</p>
-                    <div id="adm-list-profili" class="space-y-2"></div>
-                </div>
-            `;
-
-            cacheUscite = uscite;
-            cacheGare = gare;
-
-            const lu = document.getElementById('adm-list-uscite');
-            if (!uscite.length) lu.innerHTML = '<p class="text-sm text-gray-400">Nessuna uscita nel database. Aggiungine una! 🚀</p>';
-            uscite.forEach(u => {
-                const div = document.createElement('div');
-                div.className = 'flex flex-wrap items-center gap-2 bg-orange-50 rounded-xl px-4 py-2';
-                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">🚴 ${escHTML(u.titolo)} <span class="text-gray-400 font-normal">· ${u.data_uscita || '—'}</span></span>
-                    <button onclick="editItem('uscita', ${u.id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
-                    <button onclick="deleteItem('uscita', ${u.id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>`;
-                lu.appendChild(div);
-            });
-
-            const lg = document.getElementById('adm-list-gare');
-            if (!gare.length) lg.innerHTML = '<p class="text-sm text-gray-400">Nessuna gara nel database. Aggiungine una! 🏆</p>';
-            gare.forEach(g => {
-                const n = (g.iscrizioni || []).length;
-                const div = document.createElement('div');
-                div.className = 'flex flex-wrap items-center gap-2 bg-violet-50 rounded-xl px-4 py-2';
-                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">🏁 ${escHTML(g.titolo)} <span class="text-gray-400 font-normal">· ${g.data_gara || '—'} · ${g.luogo ? escHTML(g.luogo) + ' · ' : ''}🎟️ ${n} iscritt${n === 1 ? 'o' : 'i'}</span></span>
-                    <button onclick="editItem('gara', ${g.id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
-                    <button onclick="deleteItem('gara', ${g.id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>`;
-                lg.appendChild(div);
-            });
-
-            const lp = document.getElementById('adm-list-profili');
-            if (!risProf.error && !profili.length) lp.innerHTML = '<p class="text-sm text-gray-400">Nessun profilo registrato al momento.</p>';
-            if (risProf.error) lp.innerHTML = '<p class="text-sm text-gray-400">Impossibile leggere i profili (' + escHTML(risProf.error.message) + ').</p>';
-            profili.sort((a, b) => (b.is_admin === true) - (a.is_admin === true) || (a.nome || '').localeCompare(b.nome || ''));
-            profili.forEach(p => {
-                const me = currentUser && p.id === currentUser.id;
-                const div = document.createElement('div');
-                div.className = 'flex flex-wrap items-center gap-2 bg-gray-50 rounded-xl px-4 py-2';
-                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">${p.is_admin ? '👑' : '😊'} ${escHTML(p.nome || 'Atleta')}${me ? ' <span class="text-xs text-orange-500">(tu)</span>' : ''}</span>
-                    <button onclick="toggleAdmin('${p.id}', ${!p.is_admin})" class="btn-friendly ${p.is_admin ? 'bg-gray-200 text-gray-700' : 'bg-rose-500 text-white'} px-3 py-1 rounded-full text-xs font-bold">${p.is_admin ? '⬇️ Rimuovi admin' : '⬆️ Rendi admin'}</button>`;
-                lp.appendChild(div);
-            });
-        }
-
-        // Mini utility per l'area admin
-        function todayISO() { const d = new Date(); return d.toISOString().slice(0, 10); }
-        function formatDate(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
-        function escHTML(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-
-        let cacheProfili = [];
-        async function toggleAdmin(profileId, newValue) {
-            const p = cacheProfili.find(x => x.id === profileId);
-            if (!p) return;
-            if (currentUser && profileId === currentUser.id && !newValue) {
-                showMsg('Non puoi rimuovere il tuo stesso ruolo admin, così restano sempre amministratori attivi. 😉', 'error');
-                return;
-            }
-            const { error } = await sb.from('profiles').update({ is_admin: newValue }).eq('id', profileId);
-            if (error) { showMsg('Non sono riuscito ad aggiornare il ruolo: ' + error.message, 'error'); return; }
-            showMsg(newValue ? `${p.nome || 'Atleta'} ora è amministratore! 👑` : `Ruolo admin rimosso per ${p.nome || 'Atleta'}.`);
-            loadAdminArea();
-        }
-
-        // Dopo un salvataggio/cancellazione, se siamo nell'area riservata aggiorna quella vista
-        function refreshCurrentTab() { loadData(currentTab); }
-
-// --- ADMIN MODALE & UPLOAD ---
-        function openModal(type, item = null) {
-            document.getElementById('admin-modal').classList.remove('hidden');
-            document.getElementById('modal-title').textContent = item
-                ? (type === 'uscita' ? '✏️ Modifica Uscita' : '✏️ Modifica Gara')
-                : (type === 'uscita' ? 'Nuova Uscita' : 'Nuova Gara');
-            document.getElementById('form-type').value = type;
-            document.getElementById('form-id').value = item ? item.id : '';
-            document.getElementById('gpx-input-area').className = type === 'uscita' ? '' : 'hidden';
-            document.getElementById('gpx-stats').classList.add('hidden');
-            document.getElementById('gpx-auto-note').classList.add('hidden');
-            document.getElementById('f-extra').placeholder = type === 'uscita' ? 'Descrizione percorso' : 'Luogo della gara';
-            if (item) {
-                document.getElementById('f-titolo').value = item.titolo || '';
-                document.getElementById('f-data').value = (type === 'uscita' ? item.data_uscita : item.data_gara) || '';
-                document.getElementById('f-extra').value = (type === 'uscita' ? item.descrizione : item.luogo) || '';
-                document.getElementById('f-distanza').value = item.distanza_km ?? '';
-                document.getElementById('f-dislivello').value = item.dislivello_m ?? '';
-            }
-        }
-
-        function editItem(type, id) {
-            const list = type === 'uscita' ? cacheUscite : cacheGare;
-            const item = list.find(x => String(x.id) === String(id));
-            if (!item) { showMsg('Mi sfugge questo elemento... ricarica la pagina e riprova. 🔄', 'error'); return; }
-            openModal(type, item);
-        }
-
-        async function deleteItem(type, id) {
-            if (!confirm('Sicuri di voler eliminare questo evento? 🗑️')) return;
-            const table = type === 'uscita' ? 'uscite' : 'gare';
-            const { error } = await sb.from(table).delete().eq('id', id);
-            if (error) { console.error('delete:', error); showMsg('Ops! Non sono riuscito a eliminare (' + error.message + ')', 'error'); return; }
-            showMsg('Eliminato! Alla prossima! 👋');
-            refreshCurrentTab();
-        }
-
-        function closeModal() {
-            document.getElementById('admin-modal').classList.add('hidden');
-            document.getElementById('admin-form').reset();
-            document.getElementById('form-id').value = '';
-        }
-
-        document.getElementById('admin-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const type = document.getElementById('form-type').value;
-            const editId = document.getElementById('form-id').value;
-            const titolo = document.getElementById('f-titolo').value;
-            const data = document.getElementById('f-data').value;
-            const extra = document.getElementById('f-extra').value;
-            const distanza = parseFloat(document.getElementById('f-distanza').value);
-            const dislivello = parseInt(document.getElementById('f-dislivello').value, 10);
-            const gpxFile = document.getElementById('f-gpx').files[0];
-
-            let gpxUrl = null;
-
-            if (type === 'uscita' && gpxFile) {
-                const filePath = `${currentUser.id}-${Date.now()}.gpx`;
-                const { error: uploadErr } = await sb.storage.from('tracce-gpx').upload(filePath, gpxFile);
-                if (uploadErr) { showMsg("Errore upload GPX", 'error'); return; }
-                const { data: urlData } = sb.storage.from('tracce-gpx').getPublicUrl(filePath);
-                gpxUrl = urlData.publicUrl;
-            } else if (type === 'uscita' && editId) {
-                // In modifica: se non carichi un nuovo GPX, mantieni la traccia esistente
-                const old = cacheUscite.find(x => String(x.id) === String(editId));
-                gpxUrl = old ? old.gpx_url : null;
-            }
-
-            if (type === 'uscita') {
-                const payload = { titolo, data_uscita: data, descrizione: extra, gpx_url: gpxUrl, distanza_km: isNaN(distanza) ? null : distanza, dislivello_m: isNaN(dislivello) ? null : dislivello };
-                const { error } = editId
-                    ? await sb.from('uscite').update(payload).eq('id', editId)
-                    : await sb.from('uscite').insert(payload);
-                if (error) { console.error('save uscite:', error); showMsg("Ops! Non siamo riusciti a salvare l'uscita (" + error.message + ").", 'error'); return; }
-                showMsg(editId ? 'Uscita aggiornata! Grazie mille! 🙌' : "Uscita pubblicata! Buona pedalata! 🚴💨");
-            } else {
-                const payload = { titolo, data_gara: data, luogo: extra, distanza_km: isNaN(distanza) ? null : distanza, dislivello_m: isNaN(dislivello) ? null : dislivello };
-                const { error } = editId
-                    ? await sb.from('gare').update(payload).eq('id', editId)
-                    : await sb.from('gare').insert(payload);
-                if (error) { console.error('save gare:', error); showMsg("Ops! Non siamo riusciti a salvare la gara (" + error.message + ").", 'error'); return; }
-                showMsg(editId ? 'Gara aggiornata! Tutto pronto per la prossima! 🏁' : "Gara pubblicata! Che vinca il migliore! 🏆");
-            }
-
-            closeModal();
-            refreshCurrentTab();
-        });
-
-        // AVVIO
-        checkUser();
-        checkSchema();
-    </script>
+    <div class="grid" style="grid-template-columns:1fr 1fr;align-items:start;margin-top:16px">
+      <div class="card">
+        <div class="section-title" style="margin-top:0">👑 Ruoli amministratori <span class="badge b-rose">${adminCount}</span></div>
+        <p class="hint" style="margin-bottom:8px">Assegna o revoca il ruolo staff. Non puoi rimuovere te stesso/a per non restare senza admin.</p>
+        <ul class="list-plain">${(prof||[]).sort((a,b)=>(b.is_admin?1:0)-(a.is_admin?1:0)).map(p=>{const me=p.id===currentUser?.id;return `<li><span><b style="font-size:13px">${p.is_admin?'👑':'😊'} ${escHTML(p.nome||'Atleta')}</b>${me?' <span style="font-size:11px;color:var(--accent)">(tu)</span>':''}</span>
+          <button class="btn ${p.is_admin?'btn-light':'btn-accent'} btn-xs" onclick="toggleAdmin('${p.id}',${!p.is_admin})">${p.is_admin?'⬇️ Revoca':'⬆️ Rendi admin'}</button></li>`}).join('')}</ul>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-top:0">💬 Moderazione bacheca</div>
+        <ul class="list-plain">${(messaggi||[]).map(m=>`<li><span><b style="font-size:12.5px">${escHTML(m.autore?.nome||'Anonimo')}</b> <span style="font-size:11px;color:var(--muted)">· ${relTime(m.created_at)}</span><br><span style="font-size:12.5px">${escHTML((m.testo||'').slice(0,90))}${(m.testo||'').length>90?'…':''}</span></span>
+          <button class="btn btn-danger btn-xs" onclick="deleteMsgAdmin(${m.id})">✕</button></li>`).join('')||'<li>Nessun messaggio.</li>'}</ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="section-title" style="margin-top:0">🗓️ Calendario prossimo</div>
+      <ul class="list-plain">${prossimi.slice(0,8).map(e=>`<li><span>${e.t==='uscita'?'🚴':'🏁'} <b>${escHTML(e.titolo)}</b></span><span class="badge b-teal">${fmtDate(e.data)}</span></li>`).join('')||'<li>Agenda libera! Aggiungiamo un evento? 🚀</li>'}</ul>
+    </div>`;
+}
+async function toggleAdmin(pid,val){
+  if(pid===currentUser.id&&!val){ toast('Non puoi rimuovere te stesso/a 😉',true); return; }
+  const {error}=await sb.from('profiles').update({is_admin:val}).eq('id',pid);
+  if(error) toast('Ruolo non aggiornato: '+error.message,true);
+  else{ toast(val?'Nuovo admin nominato! 👑':'Ruolo admin revocato.'); renderAdmin(); }
+}
+async function deleteMsgAdmin(id){
+  if(!confirm('Eliminare il messaggio?')) return;
+  const {error}=await sb.from('messaggi').delete().eq('id',id);
+  if(error) toast('Eliminazione fallita',true); else renderAdmin();
+}
+
+// ================= MODALE EVENTO (CRUD admin) =================
+function openEventModal(type,item=null){
+  $('event-modal').classList.add('open');
+  $('form-type').value=type; $('form-id').value=item?item.id:'';
+  $('ev-modal-title').textContent=(item?'✏️ Modifica ':'➕ ')+(type==='uscita'?'Uscita':'Gara');
+  $('gpx-field').style.display=type==='uscita'?'block':'none';
+  $('lbl-extra').textContent=type==='uscita'?'Luogo di partenza':'Sede / luogo gara';
+  $('event-form').reset(); $('f-ora').value='07:30'; $('gpx-stats').style.display='none';
+  if(item){
+    $('f-titolo').value=item.titolo||''; $('f-data').value=(type==='uscita'?item.data_uscita:item.data_gara)||'';
+    $('f-ora').value=item.ora_ritrovo||''; $('f-extra').value=(type==='uscita'?(item.luogo_partenza||item.descrizione):item.luogo)||'';
+    $('f-ritmo').value=item.ritmo||''; $('f-distanza').value=item.distanza_km??''; $('f-dislivello').value=item.dislivello_m??'';
+    $('f-desc').value=item.descrizione||'';
+  }
+}
+function closeEventModal(){ $('event-modal').classList.remove('open'); }
+$('event-modal').addEventListener('click',e=>{if(e.target.id==='event-modal')closeEventModal()});
+function editItem(type,id){
+  const item=(type==='uscita'?cacheUscite:cacheGare).find(x=>String(x.id)===String(id));
+  if(!item){ toast('Elemento non trovato, ricarica 🔄',true); return; }
+  openEventModal(type,item);
+}
+async function deleteItem(type,id){
+  if(!confirm('Eliminare definitivamente questo evento? Le eventuali iscrizioni verranno rimosse.')) return;
+  const {error}=await sb.from(type==='uscita'?'uscite':'gare').delete().eq('id',id);
+  if(error) toast('Eliminazione fallita: '+error.message,true);
+  else{ toast('Evento eliminato 👋'); loadData(currentTab); }
+}
+
+// --- GPX parsing ---
+function haversine(a,b,c,d){ const R=6371000,r=x=>x*Math.PI/180,dLa=r(c-a),dLo=r(d-b);
+  const x=Math.sin(dLa/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+function parseGpxPoints(text){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.querySelector('parsererror')) throw new Error('File GPX non valido.');
+  const pts=[]; doc.getElementsByTagName('*').forEach(n=>{ const t=n.tagName.toLowerCase();
+    if(t==='trkpt'||t==='rtept'||t==='wpt'){ const lat=parseFloat(n.getAttribute('lat')),lon=parseFloat(n.getAttribute('lon'));
+      if(!isNaN(lat)&&!isNaN(lon)){ let ele=null; for(const c of n.children) if(c.tagName.toLowerCase()==='ele'){const v=parseFloat(c.textContent); if(!isNaN(v))ele=v;}
+        pts.push({lat,lon,ele}); }}});
+  if(pts.length<2) throw new Error('Il GPX non contiene abbastanza punti.');
+  return pts;
+}
+function calcGpxStats(pts){ let dist=0,gain=0;
+  for(let i=1;i<pts.length;i++){ dist+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
+    const p=pts[i-1].ele,c=pts[i].ele; if(p!=null&&c!=null&&c-p>0.5) gain+=c-p; }
+  return {distanceM:dist,elevationGainM:gain}; }
+$('f-gpx').addEventListener('change',async e=>{
+  const file=e.target.files[0]; $('gpx-stats').style.display='none'; if(!file) return;
+  try{ const pts=parseGpxPoints(await file.text()); const st=calcGpxStats(pts);
+    $('f-distanza').value=(st.distanceM/1000).toFixed(1);
+    const hasEle=pts.some(p=>p.ele!=null); if(hasEle) $('f-dislivello').value=Math.round(st.elevationGainM);
+    const el=$('gpx-stats'); el.textContent=`🤖 GPX letto: 📏 ${(st.distanceM/1000).toFixed(1)} km${hasEle?' · ⛰️ '+Math.round(st.elevationGainM)+' m D+':''}`; el.style.display='block';
+  }catch(err){ toast('GPX illeggibile: '+err.message,true); }
+});
+
+$('event-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const type=$('form-type').value, editId=$('form-id').value;
+  const payloadBase={ titolo:$('f-titolo').value.trim(), ora_ritrovo:$('f-ora').value||null, ritmo:$('f-ritmo').value||null,
+    distanza_km:parseFloat($('f-distanza').value)||null, dislivello_m:parseInt($('f-dislivello').value,10)||null, descrizione:$('f-desc').value.trim()||null };
+  let gpxUrl=null;
+  const gpxFile=$('f-gpx').files[0];
+  if(type==='uscita'&&gpxFile){
+    const fp=`${currentUser.id}-${Date.now()}.gpx`;
+    const {error:ue}=await sb.storage.from('tracce-gpx').upload(fp,gpxFile);
+    if(ue){ toast('Upload GPX fallito: '+ue.message,true); return; }
+    gpxUrl=sb.storage.from('tracce-gpx').getPublicUrl(fp).data.publicUrl;
+  } else if(type==='uscita'&&editId){ gpxUrl=(cacheUscite.find(x=>String(x.id)===String(editId))||{}).gpx_url||null; }
+  let payload,table;
+  if(type==='uscita'){ table='uscite'; payload={...payloadBase,data_uscita:$('f-data').value,luogo_partenza:$('f-extra').value||null,gpx_url:gpxUrl}; }
+  else{ table='gare'; payload={...payloadBase,data_gara:$('f-data').value,luogo:$('f-extra').value||null}; }
+  const q=editId?sb.from(table).update(payload).eq('id',editId):sb.from(table).insert(payload);
+  const {error}=await q;
+  if(error){ toast('Salvataggio fallito: '+error.message,true); return; }
+  closeEventModal(); toast(editId?'Modifiche salvate ✅':'Evento pubblicato 🎉'); loadData(currentTab);
+});
+
+// ================= PROFILO =================
+function openProfileModal(){
+  if(!currentUser) return;
+  $('profile-modal').classList.add('open');
+  $('p-nome').value=myProfile?.nome||''; $('p-bike').value=myProfile?.bike_tag||'';
+  $('p-email').textContent=currentUser.email||'';
+  $('p-role').innerHTML=myProfile?.is_admin?'Ruolo: <span class="badge b-rose">👑 Amministratore</span>':'Ruolo: <span class="badge b-teal">Membro</span>';
+}
+function closeProfileModal(){ $('profile-modal').classList.remove('open'); }
+$('profile-modal').addEventListener('click',e=>{if(e.target.id==='profile-modal')closeProfileModal()});
+$('profile-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const nome=$('p-nome').value.trim()||'Atleta', bike=$('p-bike').value.trim()||null;
+  const {error}=await sb.from('profiles').update({nome,bike_tag:bike}).eq('id',currentUser.id);
+  if(error){ toast('Salvataggio fallito: '+error.message,true); return; }
+  localStorage.setItem('pa_nome',nome); myProfile={...myProfile,nome,bike_tag:bike};
+  closeProfileModal(); toast('Profilo aggiornato ✨'); renderAuthUI();
+});
+
+// ================= AVVIO =================
+$('year').textContent=new Date().getFullYear();
+checkUser(); checkSchema();
+</script>
 </body>
 </html>
+
