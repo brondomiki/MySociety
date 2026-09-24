@@ -381,9 +381,15 @@ async function checkRole(){
   if(error){ console.warn('profilo:',error.message); }
   else if(!data){
     profileMissing=true;
-    const {error:insErr}=await sb.from('profiles').insert({id:currentUser.id,nome:currentUser.user_metadata?.nome||'Atleta',is_admin:false});
+    // IL PRIMO UTENTE REGISTRATO DIVENTA AUTOMATICAMENTE AMMINISTRATORE 👑
+    let primoUtente=false;
+    try{
+      const {count} = await sb.from('profiles').select('id',{count:'exact',head:true});
+      primoUtente=!count;
+    }catch(e){ /* se non possiamo contare, procediamo come membro */ }
+    const {error:insErr}=await sb.from('profiles').insert({id:currentUser.id,nome:currentUser.user_metadata?.nome||'Atleta',is_admin:primoUtente});
     if(insErr) toast('Profilo non ancora creato: contatta un admin.',true);
-    else{ profileMissing=false; toast('Profilo creato! Ora sei dei nostri 🚴'); }
+    else{ profileMissing=false; toast(primoUtente?'Sei il/la fondatore/trice del portale: sei amministratore/a! 👑':'Profilo creato! Ora sei dei nostri 🚴'); }
   }else{ myProfile=data; }
   if(profileMissing){ const {data:f}=await sb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle(); if(f) myProfile=f; }
   isAdmin=myProfile?.is_admin||false;
@@ -404,7 +410,11 @@ function renderAuthUI(){
         <span class="avatar" style="width:22px;height:22px;font-size:9.5px;background:${avatarColor(nome)}">${initials(nome)}</span> Ciao ${escHTML(nome)}</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()" title="Esci">⎋</button>`;
     if(!isAdmin && currentTab==='admin') switchTab('home');
-    notice();
+    if(isAdmin){
+      notice(`👑 <b>Sei un'amministratrice/re!</b> Hai la tab <b>🛡️ Admin</b> nel menu e i pulsanti per aggiungere, modificare ed eliminare uscite e gare. <button class="btn btn-accent btn-xs" style="margin-left:6px" onclick="switchTab('admin')">Apri pannello admin →</button>`,'n-ok');
+    } else {
+      notice();
+    }
   }
 }
 

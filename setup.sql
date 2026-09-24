@@ -171,3 +171,32 @@ create policy "authenticated upload tracce-gpx" on storage.objects for insert
 -- update public.profiles set is_admin = true where id = '<uuid-del-tuo-utente>';
 -- In alternativa, dopo la prima registrazione puoi passarti il ruolo anche dal
 -- portale: tab 🛡️ Admin → "Ruoli amministratori" (richiede almeno un admin attivo).
+
+-- ============================================================
+-- 🔧 FIX "il mio utente non risulta admin" — risolve in un colpo solo:
+-- 1) se NON HAI ANCORA registrato nessuno, al primo accesso il portale
+--    rende automaticamente admin il primo utente registrato (nel codice).
+-- 2) Se ti sei già registrato/a ma non risulti admin, ESEGUI QUESTO BLOCCO:
+--    imposta la TUA EMAIL e premi Run. Aggiorna is_admin=true anche se
+--    la policy di aggiornamento del proprio profilo fosse mancante,
+--    perché usa un blocco SECURITY DEFINER (funziona una sola volta).
+-- ============================================================
+
+create or replace function public.become_admin(my_email text)
+returns void language plpgsql security definer set search_path = public as $$
+declare u_uid uuid;
+begin
+  select id into u_uid from auth.users where lower(email) = lower(my_email) limit 1;
+  if u_uid is null then
+    raise exception 'Nessun utente con email % — registrati prima sul portale!', my_email;
+  end if;
+  insert into public.profiles (id, nome, is_admin)
+  values (u_uid, 'Amministratore', true)
+  on conflict (id) do update set is_admin = true;
+end $$;
+
+-- 👉 Sostituisci la tua email ed esegui:
+-- select public.become_admin('brondomiki@gmail.com');
+
+revoke all on function public.become_admin(text) from public;
+grant execute on function public.become_admin(text) to authenticated, anon;
