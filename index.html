@@ -48,6 +48,7 @@
         <div class="flex gap-2 mb-6 mt-4">
             <button onclick="switchTab('uscite')" id="tab-uscite" class="btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600">🗺️ Uscite Settimanali</button>
             <button onclick="switchTab('gare')" id="tab-gare" class="btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600">🏁 Gare</button>
+            <button onclick="switchTab('admin')" id="tab-admin" class="btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600 hidden">🛡️ Area Riservata</button>
             <div id="admin-btns" class="ml-auto hidden flex items-center gap-2"></div>
         </div>
 
@@ -212,11 +213,13 @@
         function renderAuthUI() {
             const area = document.getElementById('auth-area');
             const adminBtns = document.getElementById('admin-btns');
+            const adminTab = document.getElementById('tab-admin');
             if (!currentUser) {
                 // Se l'utente si è appena registrato ma deve confermare l'email: avvisalo con chiarezza
                 const pendingUser = signUpPendingUser;
                 area.innerHTML = `<button onclick="login()" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Accedi</button>`;
                 adminBtns.classList.add('hidden');
+                adminTab.classList.add('hidden');
                 if (pendingUser) {
                     const box = document.getElementById('confirm-box');
                     if (!box) {
@@ -236,8 +239,13 @@
                         <button onclick="openModal('gara')" class="btn-friendly bg-violet-500 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow">➕ Gara</button>
                     `;
                     adminBtns.classList.remove('hidden');
+                    // Mostra la scheda dell'Area Riservata agli amministratori
+                    adminTab.classList.remove('hidden');
+                    const hint = document.getElementById('admin-hint');
+                    if (hint) hint.remove();
                 } else {
                     adminBtns.classList.add('hidden');
+                    adminTab.classList.add('hidden');
                     // Spieghiamo SUBITO perché non vede i pulsanti admin, così non sembra "non succeda nulla"
                     const hint = document.getElementById('admin-hint');
                     if (!hint) {
@@ -353,16 +361,25 @@
         }
 
         // --- CARICAMENTO DATI ---
+        let currentTab = 'uscite';
         function switchTab(tab) {
+            // L'Area Riservata è accessibile solo agli amministratori (controllo anche lato client)
+            if (tab === 'admin' && !isAdmin) { showMsg('Questa area è riservata agli amministratori. 🛡️', 'error'); return; }
+            currentTab = tab;
             const active = 'btn-friendly px-5 py-2 rounded-full font-bold bg-white shadow text-orange-600';
             const inactive = 'btn-friendly px-5 py-2 rounded-full font-bold text-gray-500 hover:text-orange-600';
             document.getElementById('tab-uscite').className = tab === 'uscite' ? active : inactive;
             document.getElementById('tab-gare').className = tab === 'gare' ? active : inactive;
+            const adminTabEl = document.getElementById('tab-admin');
+            adminTabEl.className = tab === 'admin'
+                ? active.replace('text-orange-600', 'text-rose-600') + ' ' + (isAdmin ? '' : 'hidden')
+                : inactive + (isAdmin ? '' : ' hidden');
             loadData(tab);
         }
 
         async function loadData(tab = 'uscite') {
             const area = document.getElementById('content-area');
+            if (tab === 'admin') { await loadAdminArea(); return; }
             area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> <span class="text-sm text-gray-500">Caricamento, un attimo... ⏳</span></div>';
 
             if (tab === 'uscite') {
@@ -551,6 +568,142 @@
             });
         });
 
+// --- AREA RISERVATA AMMINISTRATORI ---
+        async function loadAdminArea() {
+            const area = document.getElementById('content-area');
+            area.innerHTML = '<div class="text-center p-4"><div class="loader"></div> <span class="text-sm text-gray-500">Caricamento dashboard... ⏳</span></div>';
+
+            const [risUscite, risGare, risProf] = await Promise.all([
+                sb.from('uscite').select('*').order('data_uscita', { ascending: false }),
+                sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara', { ascending: false }),
+                sb.from('profiles').select('id, nome, is_admin')
+            ]);
+
+            if (risUscite.error || risGare.error) {
+                area.innerHTML = '<div class="bg-white rounded-2xl shadow p-8 text-center card-anim"><p class="text-4xl mb-2">🛠️</p><p class="text-gray-500 font-semibold">Non riesco a leggere i dati del database.</p><p class="text-sm text-gray-400 mt-1">' + ((risUscite.error || risGare.error).message || '') + '</p></div>';
+                return;
+            }
+
+            const uscite = risUscite.data || [];
+            const gare = risGare.data || [];
+            const profili = risProf.data || [];
+            cacheProfili = profili;
+            const adminCount = profili.filter(p => p.is_admin).length;
+            const prossimiEventi = [...uscite.map(u => ({ t: 'uscita', titolo: u.titolo, data: u.data_uscita })),
+                                    ...gare.map(g => ({ t: 'gara', titolo: g.titolo, data: g.data_gara }))]
+                                    .filter(e => e.data && e.data >= todayISO()).sort((a, b) => a.data.localeCompare(b.data));
+
+            area.innerHTML = `
+                <!-- Intestazione -->
+                <div class="bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl shadow p-5 mb-4 card-anim">
+                    <h2 class="text-xl font-extrabold">🛡️ Area Riservata agli Amministratori</h2>
+                    <p class="text-sm text-orange-100 mt-1">Solo chi ha il ruolo <b>admin</b> può vedere e gestire questa sezione. I dati sono protetti anche dal database (RLS). 🔒</p>
+                </div>
+
+                <!-- Statistiche -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🚴</p><p class="text-2xl font-extrabold text-orange-600">${uscite.length}</p><p class="text-xs font-bold text-gray-500">Uscite</p></div>
+                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🏁</p><p class="text-2xl font-extrabold text-violet-600">${gare.length}</p><p class="text-xs font-bold text-gray-500">Gare</p></div>
+                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">👥</p><p class="text-2xl font-extrabold text-emerald-600">${profili.length}</p><p class="text-xs font-bold text-gray-500">Iscritti</p></div>
+                    <div class="bg-white rounded-2xl shadow p-4 text-center card-anim"><p class="text-3xl">🗓️</p><p class="text-2xl font-extrabold text-sky-600">${prossimiEventi.length}</p><p class="text-xs font-bold text-gray-500">Prossimi eventi</p></div>
+                </div>
+
+                ${prossimiEventi.length ? `
+                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim border-l-4 border-sky-400">
+                    <h3 class="font-extrabold text-gray-800 mb-2">📅 Prossimi appuntamenti</h3>
+                    <ul class="space-y-1 text-sm text-gray-600">
+                        ${prossimiEventi.slice(0, 5).map(e => `<li>${e.t === 'uscita' ? '🚴' : '🏁'} <b>${escHTML(e.titolo)}</b> — ${formatDate(e.data)}</li>`).join('')}
+                    </ul>
+                </div>` : ''}
+
+                <!-- Gestione Uscite -->
+                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-extrabold text-gray-800">🚴 Gestione Uscite</h3>
+                        <button onclick="openModal('uscita')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">➕ Nuova</button>
+                    </div>
+                    <div id="adm-list-uscite" class="space-y-2"></div>
+                </div>
+
+                <!-- Gestione Gare -->
+                <div class="bg-white rounded-2xl shadow p-5 mb-6 card-anim">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-extrabold text-gray-800">🏁 Gestione Gare</h3>
+                        <button onclick="openModal('gara')" class="btn-friendly bg-violet-500 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow">➕ Nuova</button>
+                    </div>
+                    <div id="adm-list-gare" class="space-y-2"></div>
+                </div>
+
+                <!-- Gestione Admin -->
+                <div class="bg-white rounded-2xl shadow p-5 card-anim">
+                    <h3 class="font-extrabold text-gray-800 mb-1">👑 Ruoli amministratori <span class="text-sm font-bold text-rose-500">(${adminCount})</span></h3>
+                    <p class="text-xs text-gray-500 mb-3">Assegna o rimuovi il ruolo admin ai membri della community (attenzione: non puoi rimuovere te stesso, altrimenti resteresti senza admin!).</p>
+                    <div id="adm-list-profili" class="space-y-2"></div>
+                </div>
+            `;
+
+            cacheUscite = uscite;
+            cacheGare = gare;
+
+            const lu = document.getElementById('adm-list-uscite');
+            if (!uscite.length) lu.innerHTML = '<p class="text-sm text-gray-400">Nessuna uscita nel database. Aggiungine una! 🚀</p>';
+            uscite.forEach(u => {
+                const div = document.createElement('div');
+                div.className = 'flex flex-wrap items-center gap-2 bg-orange-50 rounded-xl px-4 py-2';
+                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">🚴 ${escHTML(u.titolo)} <span class="text-gray-400 font-normal">· ${u.data_uscita || '—'}</span></span>
+                    <button onclick="editItem('uscita', ${u.id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
+                    <button onclick="deleteItem('uscita', ${u.id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>`;
+                lu.appendChild(div);
+            });
+
+            const lg = document.getElementById('adm-list-gare');
+            if (!gare.length) lg.innerHTML = '<p class="text-sm text-gray-400">Nessuna gara nel database. Aggiungine una! 🏆</p>';
+            gare.forEach(g => {
+                const n = (g.iscrizioni || []).length;
+                const div = document.createElement('div');
+                div.className = 'flex flex-wrap items-center gap-2 bg-violet-50 rounded-xl px-4 py-2';
+                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">🏁 ${escHTML(g.titolo)} <span class="text-gray-400 font-normal">· ${g.data_gara || '—'} · ${g.luogo ? escHTML(g.luogo) + ' · ' : ''}🎟️ ${n} iscritt${n === 1 ? 'o' : 'i'}</span></span>
+                    <button onclick="editItem('gara', ${g.id})" class="btn-friendly bg-sky-100 text-sky-700 px-3 py-1 rounded-full text-xs font-bold">✏️ Modifica</button>
+                    <button onclick="deleteItem('gara', ${g.id})" class="btn-friendly bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">🗑️ Elimina</button>`;
+                lg.appendChild(div);
+            });
+
+            const lp = document.getElementById('adm-list-profili');
+            if (!risProf.error && !profili.length) lp.innerHTML = '<p class="text-sm text-gray-400">Nessun profilo registrato al momento.</p>';
+            if (risProf.error) lp.innerHTML = '<p class="text-sm text-gray-400">Impossibile leggere i profili (' + escHTML(risProf.error.message) + ').</p>';
+            profili.sort((a, b) => (b.is_admin === true) - (a.is_admin === true) || (a.nome || '').localeCompare(b.nome || ''));
+            profili.forEach(p => {
+                const me = currentUser && p.id === currentUser.id;
+                const div = document.createElement('div');
+                div.className = 'flex flex-wrap items-center gap-2 bg-gray-50 rounded-xl px-4 py-2';
+                div.innerHTML = `<span class="font-bold text-sm flex-1 min-w-[180px]">${p.is_admin ? '👑' : '😊'} ${escHTML(p.nome || 'Atleta')}${me ? ' <span class="text-xs text-orange-500">(tu)</span>' : ''}</span>
+                    <button onclick="toggleAdmin('${p.id}', ${!p.is_admin})" class="btn-friendly ${p.is_admin ? 'bg-gray-200 text-gray-700' : 'bg-rose-500 text-white'} px-3 py-1 rounded-full text-xs font-bold">${p.is_admin ? '⬇️ Rimuovi admin' : '⬆️ Rendi admin'}</button>`;
+                lp.appendChild(div);
+            });
+        }
+
+        // Mini utility per l'area admin
+        function todayISO() { const d = new Date(); return d.toISOString().slice(0, 10); }
+        function formatDate(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
+        function escHTML(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+        let cacheProfili = [];
+        async function toggleAdmin(profileId, newValue) {
+            const p = cacheProfili.find(x => x.id === profileId);
+            if (!p) return;
+            if (currentUser && profileId === currentUser.id && !newValue) {
+                showMsg('Non puoi rimuovere il tuo stesso ruolo admin, così restano sempre amministratori attivi. 😉', 'error');
+                return;
+            }
+            const { error } = await sb.from('profiles').update({ is_admin: newValue }).eq('id', profileId);
+            if (error) { showMsg('Non sono riuscito ad aggiornare il ruolo: ' + error.message, 'error'); return; }
+            showMsg(newValue ? `${p.nome || 'Atleta'} ora è amministratore! 👑` : `Ruolo admin rimosso per ${p.nome || 'Atleta'}.`);
+            loadAdminArea();
+        }
+
+        // Dopo un salvataggio/cancellazione, se siamo nell'area riservata aggiorna quella vista
+        function refreshCurrentTab() { loadData(currentTab); }
+
 // --- ADMIN MODALE & UPLOAD ---
         function openModal(type, item = null) {
             document.getElementById('admin-modal').classList.remove('hidden');
@@ -585,7 +738,7 @@
             const { error } = await sb.from(table).delete().eq('id', id);
             if (error) { console.error('delete:', error); showMsg('Ops! Non sono riuscito a eliminare (' + error.message + ')', 'error'); return; }
             showMsg('Eliminato! Alla prossima! 👋');
-            loadData(table);
+            refreshCurrentTab();
         }
 
         function closeModal() {
@@ -636,7 +789,7 @@
             }
 
             closeModal();
-            loadData(type === 'uscita' ? 'uscite' : 'gare');
+            refreshCurrentTab();
         });
 
         // AVVIO
