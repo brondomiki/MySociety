@@ -8,8 +8,12 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users on delete cascade,
   nome text,
-  is_admin boolean default false
+  is_admin boolean default false,
+  bike_tag text,                -- es. "Pinarello Dogma · Groupy"
+  created_at timestamptz default now()
 );
+alter table public.profiles add column if not exists bike_tag text;
+alter table public.profiles add column if not exists created_at timestamptz default now();
 alter table public.profiles enable row level security;
 
 drop policy if exists "read profiles" on public.profiles;
@@ -46,11 +50,19 @@ create table if not exists public.uscite (
   descrizione text,
   gpx_url text,
   distanza_km numeric(6,1),   -- distanza in km
-  dislivello_m integer        -- dislivello positivo in metri
+  dislivello_m integer,       -- dislivello positivo in metri
+  ora_ritrovo text,           -- es. "07:30"
+  luogo_partenza text,        -- es. "Piazza Grande"
+  ritmo text,                 -- T+ / T- / C+ / C- / M+ / M- / F / GF
+  created_at timestamptz default now()
 );
 -- Aggiunge le colonne se la tabella esisteva già senza:
 alter table public.uscite add column if not exists distanza_km numeric(6,1);
 alter table public.uscite add column if not exists dislivello_m integer;
+alter table public.uscite add column if not exists ora_ritrovo text;
+alter table public.uscite add column if not exists luogo_partenza text;
+alter table public.uscite add column if not exists ritmo text;
+alter table public.uscite add column if not exists created_at timestamptz default now();
 alter table public.uscite enable row level security;
 
 drop policy if exists "read uscite" on public.uscite;
@@ -66,12 +78,20 @@ create table if not exists public.gare (
   titolo text not null,
   data_gara date,
   luogo text,
+  descrizione text,
   distanza_km numeric(6,1),   -- distanza in km
-  dislivello_m integer        -- dislivello positivo in metri
+  dislivello_m integer,       -- dislivello positivo in metri
+  ora_ritrovo text,           -- es. "08:00"
+  ritmo text,                 -- categoria / difficoltà
+  created_at timestamptz default now()
 );
 -- Aggiunge le colonne se la tabella esisteva già senza:
 alter table public.gare add column if not exists distanza_km numeric(6,1);
 alter table public.gare add column if not exists dislivello_m integer;
+alter table public.gare add column if not exists descrizione text;
+alter table public.gare add column if not exists ora_ritrovo text;
+alter table public.gare add column if not exists ritmo text;
+alter table public.gare add column if not exists created_at timestamptz default now();
 alter table public.gare enable row level security;
 
 drop policy if exists "read gare" on public.gare;
@@ -95,8 +115,32 @@ drop policy if exists "own iscrizione" on public.iscrizioni;
 create policy "own iscrizione" on public.iscrizioni for insert with check (auth.uid() = user_id);
 drop policy if exists "own cancellazione" on public.iscrizioni;
 create policy "own cancellazione" on public.iscrizioni for delete using (auth.uid() = user_id);
+-- Gli admin possono gestire le iscrizioni di tutti (es. sostituire un ritirato)
+drop policy if exists "admin manage iscrizioni" on public.iscrizioni;
+create policy "admin manage iscrizioni" on public.iscrizioni for all
+  using (exists (select 1 from public.profiles where id = auth.uid() and is_admin))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and is_admin));
 
--- 5) STORAGE per i file GPX ---------------------------------------------
+-- 5) BACHECA (messaggi) ---------------------------------------------------
+create table if not exists public.messaggi (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  testo text not null check (char_length(testo) <= 500),
+  created_at timestamptz default now()
+);
+alter table public.messaggi enable row level security;
+
+drop policy if exists "read messaggi" on public.messaggi;
+create policy "read messaggi" on public.messaggi for select using (true);
+drop policy if exists "write propri messaggi" on public.messaggi;
+create policy "write propri messaggi" on public.messaggi for insert
+  with check (auth.uid() = user_id);
+drop policy if exists "delete propri o admin messaggi" on public.messaggi;
+create policy "delete propri o admin messaggi" on public.messaggi for delete
+  using (auth.uid() = user_id
+     or exists (select 1 from public.profiles where id = auth.uid() and is_admin));
+
+-- 6) STORAGE per i file GPX ---------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('tracce-gpx', 'tracce-gpx', true)
 on conflict (id) do nothing;
@@ -119,4 +163,5 @@ create policy "authenticated upload tracce-gpx" on storage.objects for insert
 --    where id = '<uuid-del-tuo-utente>';
 --    (trovi l'UUID in Authentication → Users → Copy UUID)
 -- ============================================================
+
 
