@@ -19,6 +19,13 @@ create policy "insert own profile" on public.profiles for insert with check (aut
 drop policy if exists "update own profile" on public.profiles;
 create policy "update own profile" on public.profiles for update using (auth.uid() = id);
 
+-- Gli amministratori possono gestire i ruoli (necessario per l'Area Riservata:
+-- leggere la lista dei profili e assegnare/rimuovere il ruolo admin).
+drop policy if exists "admin manage profiles" on public.profiles;
+create policy "admin manage profiles" on public.profiles for all
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin))
+  with check (exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_admin));
+
 -- Crea automaticamente il profilo alla registrazione
 create or replace function public.handle_new_user() returns trigger as $$
 begin
