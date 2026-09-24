@@ -119,3 +119,4 @@ create policy "authenticated upload tracce-gpx" on storage.objects for insert
 --    where id = '<uuid-del-tuo-utente>';
 --    (trovi l'UUID in Authentication → Users → Copy UUID)
 -- ============================================================
+
