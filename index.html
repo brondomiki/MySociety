@@ -30,7 +30,11 @@
                 <h1 class="text-xl md:text-2xl font-extrabold">🚴 Pedale Allegro</h1>
                 <p class="text-xs md:text-sm text-orange-100">La community che pedala insieme! 🤝💨</p>
             </div>
-            <div id="auth-area" class="flex items-center gap-3"></div>
+            <div id="auth-area" class="flex items-center gap-3">
+                <!-- Fallback: i pulsanti vengono mostrati subito, prima ancora che JS parta -->
+                <button onclick="openAuthModal('login')" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Login</button>
+                <button onclick="openAuthModal('register')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full font-bold shadow">📝 Registrati</button>
+            </div>
         </div>
     </nav>
 
@@ -60,6 +64,26 @@
     <footer class="text-center py-6 text-sm text-gray-500">
         Fatto con ❤️ e tanta fatica in salita — <span class="font-semibold">Pedale Allegro</span> 🚴
     </footer>
+
+    <!-- Modale Login / Registrazione (Nascosto di default) -->
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-md card-anim">
+            <h3 id="auth-modal-title" class="text-xl font-extrabold mb-4 text-orange-600"></h3>
+            <p id="auth-modal-sub" class="text-sm text-gray-500 -mt-3 mb-4"></p>
+            <form id="auth-form" class="space-y-4">
+                <input type="hidden" id="auth-mode">
+                <input type="text" id="a-nome" placeholder="👤 Il tuo nome" autocomplete="name" class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <input type="email" id="a-email" placeholder="📧 Email" autocomplete="email" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <input type="password" id="a-password" placeholder="🔒 Password (almeno 6 caratteri)" autocomplete="current-password" minlength="6" required class="w-full p-3 border-2 border-orange-100 rounded-xl focus:border-orange-400 focus:outline-none">
+                <p id="auth-error" class="hidden text-sm font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2"></p>
+                <div class="flex gap-2 pt-2">
+                    <button type="submit" id="auth-submit-btn" class="btn-friendly bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600">🔑 Accedi</button>
+                    <button type="button" onclick="closeAuthModal()" class="btn-friendly bg-gray-100 text-gray-600 px-5 py-2 rounded-full font-bold hover:bg-gray-200">Annulla</button>
+                </div>
+                <p class="text-sm text-gray-500 text-center pt-1"><span id="auth-switch-label"></span> <button type="button" id="auth-switch-btn" onclick="toggleAuthMode()" class="font-bold text-orange-600 hover:underline"></button></p>
+            </form>
+        </div>
+    </div>
 
     <!-- Modale Admin (Nascosto di default) -->
     <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
@@ -217,7 +241,9 @@
             if (!currentUser) {
                 // Se l'utente si è appena registrato ma deve confermare l'email: avvisalo con chiarezza
                 const pendingUser = signUpPendingUser;
-                area.innerHTML = `<button onclick="login()" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Accedi</button>`;
+                area.innerHTML = `
+                    <button onclick="openAuthModal('login')" class="btn-friendly bg-white text-orange-600 px-4 py-1.5 rounded-full font-bold shadow">🔑 Login</button>
+                    <button onclick="openAuthModal('register')" class="btn-friendly bg-emerald-500 text-white px-4 py-1.5 rounded-full font-bold shadow">📝 Registrati</button>`;
                 adminBtns.classList.add('hidden');
                 adminTab.classList.add('hidden');
                 if (pendingUser) {
@@ -267,74 +293,135 @@
             }
         }
 
-        async function login() {
-            // Se c'è già una sessione valida, non serve reinserire le credenziali:
-            // (capitava di ritrovarsi "non loggati" per colpa di un token vecchio nell'URL)
-            const { data: { session } } = await sb.auth.getSession();
-            if (session?.user) {
-                currentUser = session.user;
-                renderAuthUI();
-                await checkRole();
-                loadData();
-                showMsg('Bentornato/a! La tua sessione era ancora attiva. 😊');
-                return;
+        // --- MODALE LOGIN / REGISTRAZIONE ---
+        function openAuthModal(mode) {
+            const savedNome = localStorage.getItem('pa_nome') || currentUser?.user_metadata?.nome || '';
+            document.getElementById('auth-modal').classList.remove('hidden');
+            document.getElementById('a-nome').value = savedNome;
+            document.getElementById('a-email').value = '';
+            document.getElementById('a-password').value = '';
+            hideAuthError();
+            setAuthMode(mode);
+            setTimeout(() => document.getElementById('a-email').focus(), 50);
+        }
+
+        function closeAuthModal() {
+            document.getElementById('auth-modal').classList.add('hidden');
+        }
+
+        // Chiusura modale auth: click sullo sfondo ombreggiato o tasto ESC
+        document.getElementById('auth-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'auth-modal') closeAuthModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !document.getElementById('auth-modal').classList.contains('hidden')) closeAuthModal();
+        });
+
+        function toggleAuthMode() {
+            setAuthMode(document.getElementById('auth-mode').value === 'login' ? 'register' : 'login');
+        }
+
+        function setAuthMode(mode) {
+            document.getElementById('auth-mode').value = mode;
+            const nomeInput = document.getElementById('a-nome');
+            if (mode === 'login') {
+                document.getElementById('auth-modal-title').textContent = '🔑 Accedi';
+                document.getElementById('auth-modal-sub').textContent = 'Bentornato/a! Inserisci email e password.';
+                document.getElementById('auth-submit-btn').textContent = '🔑 Login';
+                document.getElementById('auth-switch-label').textContent = 'Non hai ancora un account?';
+                document.getElementById('auth-switch-btn').textContent = 'Registrati';
+                nomeInput.classList.add('hidden'); // al login il nome non serve
+                nomeInput.required = false;
+            } else {
+                document.getElementById('auth-modal-title').textContent = '📝 Registrati';
+                document.getElementById('auth-modal-sub').textContent = 'Entra nella community: ci vogliono 30 secondi! 🚴';
+                document.getElementById('auth-submit-btn').textContent = '📝 Crea account';
+                document.getElementById('auth-switch-label').textContent = 'Hai già un account?';
+                document.getElementById('auth-switch-btn').textContent = 'Accedi';
+                nomeInput.classList.remove('hidden');
+                nomeInput.required = true;
+                if (!nomeInput.value) nomeInput.value = localStorage.getItem('pa_nome') || '';
             }
+        }
 
-            const nome = prompt("Il tuo nome (solo la prima volta):");
-            const email = prompt("La tua email:");
-            const password = prompt("Password (almeno 6 caratteri):");
-            if (!email || !password) return;
+        function showAuthError(text) {
+            const el = document.getElementById('auth-error');
+            el.textContent = '😅 ' + text;
+            el.classList.remove('hidden');
+        }
 
-            // 1) Prima prova il LOGIN diretto: non invia email, quindi non consuma
-            //    la quota di Supabase (così evitiamo l'errore "email rate limit reached").
+        function hideAuthError() {
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideAuthError();
+            const mode = document.getElementById('auth-mode').value;
+            const email = document.getElementById('a-email').value.trim();
+            const password = document.getElementById('a-password').value;
+            const btn = document.getElementById('auth-submit-btn');
+            btn.disabled = true;
+            try {
+                if (mode === 'login') {
+                    await doLogin(email, password);
+                } else {
+                    await doRegister(email, password);
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        async function doLogin(email, password) {
             const { error: loginError } = await sb.auth.signInWithPassword({ email, password });
             if (!loginError) {
+                closeAuthModal();
                 await checkUser();
+                showMsg('Benvenuto/a di nuovo! 🚴');
                 return;
             }
-
             const lm = (loginError.message || '').toLowerCase();
             if (lm.includes('invalid login') || lm.includes('invalid credentials') || lm.includes('not found')) {
-                // 2) L'utente non esiste: proviamo a registrarlo.
-                const { data: signUpData, error: regError } = await sb.auth.signUp({
-                    email, password,
-                    options: { data: { nome: nome || 'Utente' }, emailRedirectTo: SITE_URL }
-                });
-
-                if (regError) {
-                    const msg = (regError.message || '').toLowerCase();
-                    if (msg.includes('rate limit')) {
-                        showMsg("Supabase ha momentaneamente bloccato l'invio di email di conferma (limite raggiunto). ⏳ Riprova tra un po', oppure — subito dopo questa registrazione — vai nella dashboard Supabase → Authentication → Sign In / Up e DISATTIVA 'Confirm email': a quel punto ti basterà premere di nuovo 'Accedi' ed entrerai senza aspettare nessuna mail. 🙌", 'error');
-                    } else if (msg.includes('already registered') || msg.includes('already exists')) {
-                        showMsg("Mmm, risulta che questo account esista già: riprova ad accedere con le tue credenziali. 🔁", 'error');
-                    } else {
-                        showMsg(regError.message, 'error');
-                    }
-                    return;
-                }
-
-                if (signUpData.session) {
-                    // Conferma email disabilitata: sessione immediata
-                    showMsg("Evviva! Account creato, benvenuto/a nella community! 🚴");
-                    await checkUser();
-                } else {
-                    signUpPendingUser = { email };
-                    showMsg("Registrato! Controlla la tua email per confermare l'account, poi premi di nuovo 'Accedi'. 📬 (Se la mail non arriva per il limite di Supabase: disattiva 'Confirm email' nella dashboard e riprova.)", 'error');
-                    renderAuthUI();
-                }
-                return;
-            }
-
-            // 3) Esiste ma va confermata l'email: messaggio dedicato
-            if (lm.includes('confirm')) {
+                showAuthError('Email o password non corretti, oppure l\'account non esiste. Prova a registrarti!');
+            } else if (lm.includes('confirm')) {
                 signUpPendingUser = { email };
-                showMsg("Quasi fatto! Devi solo confermare l'email: apri il link che ti abbiamo inviato, poi riprova ad accedere. 📬", 'error');
+                showAuthError('Devi ancora confermare l\'email: apri il link che ti abbiamo inviato, poi riprova ad accedere. 📬');
                 renderAuthUI();
+            } else {
+                showAuthError(loginError.message);
+            }
+        }
+
+        async function doRegister(email, password) {
+            const nome = document.getElementById('a-nome').value.trim() || 'Utente';
+            const { data: signUpData, error: regError } = await sb.auth.signUp({
+                email, password,
+                options: { data: { nome }, emailRedirectTo: SITE_URL }
+            });
+            if (regError) {
+                const msg = (regError.message || '').toLowerCase();
+                if (msg.includes('rate limit')) {
+                    showAuthError("Supabase ha momentaneamente bloccato l'invio di email di conferma (limite raggiunto). ⏳ Riprova tra un po', oppure vai nella dashboard Supabase → Authentication → Sign In / Up e DISATTIVA 'Confirm email': a quel punto ti basterà premere di nuovo 'Login' ed entrerai subito. 🙌");
+                } else if (msg.includes('already registered') || msg.includes('already exists')) {
+                    showAuthError('Questo account esiste già: passa al Login. 🔁');
+                } else {
+                    showAuthError(regError.message);
+                }
                 return;
             }
-
-            // Errore generico (es. troppi tentativi falliti)
-            showMsg(loginError.message, 'error');
+            localStorage.setItem('pa_nome', nome); // il nome viene ricordato: mai più richiesto!
+            if (signUpData.session) {
+                // Conferma email disabilitata: sessione immediata
+                closeAuthModal();
+                showMsg('Evviva! Account creato, benvenuto/a nella community! 🚴');
+                await checkUser();
+            } else {
+                signUpPendingUser = { email };
+                closeAuthModal();
+                showMsg("Registrato! Controlla la tua email per confermare l'account, poi premi di nuovo 'Login'. 📬", 'error');
+                renderAuthUI();
+            }
         }
 
         // --- DIAGNOSTICA: segnala in alto eventuali errori Supabase (es. tabelle mancanti) ---
