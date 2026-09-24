@@ -164,4 +164,10 @@ create policy "authenticated upload tracce-gpx" on storage.objects for insert
 --    (trovi l'UUID in Authentication → Users → Copy UUID)
 -- ============================================================
 
-
+-- 7) UTILE: rendi il tuo account amministratore (sostituisci l'UUID) -----------
+-- Se non ricordi chi è admin, controlla con:
+--   select id, nome, is_admin from public.profiles;
+-- poi assegna il ruolo:
+-- update public.profiles set is_admin = true where id = '<uuid-del-tuo-utente>';
+-- In alternativa, dopo la prima registrazione puoi passarti il ruolo anche dal
+-- portale: tab 🛡️ Admin → "Ruoli amministratori" (richiede almeno un admin attivo).

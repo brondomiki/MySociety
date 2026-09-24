@@ -159,6 +159,8 @@ footer.site a{color:#5eead4}
 .section-title{font-family:'Sora';font-weight:800;font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
 .admin-only{display:none}
 body.is-admin .admin-only{display:inline-flex}
+.admin-only-block{display:none}
+body.is-admin .admin-only-block{display:block}
 .notice{border-radius:12px;padding:12px 16px;font-size:13px;font-weight:600;margin-bottom:14px}
 .n-warn{background:#fef9c3;color:#713f12;border:1px solid #fde68a}
 .n-info{background:var(--sky-soft);color:#075985;border:1px solid #bae6fd}
@@ -243,13 +245,13 @@ body.is-admin .admin-only{display:inline-flex}
     <div class="modal-body">
       <form id="event-form">
         <input type="hidden" id="form-type"><input type="hidden" id="form-id">
-        <div class="field"><label>Titolo *</label><input id="f-titolo" placeholder="es. Girello del mercoledì" required></div>
+        <div class="field"><label>Titolo *</label><input id="f-titolo" placeholder="es. Girello del mercoledì" required autocomplete="off"></div>
         <div class="form-row">
           <div class="field"><label>Data *</label><input id="f-data" type="date" required></div>
           <div class="field"><label>Orario ritrovo</label><input id="f-ora" type="time" value="07:30"></div>
         </div>
         <div class="form-row">
-          <div class="field"><label id="lbl-extra">Luogo di partenza</label><input id="f-extra" placeholder="es. Piazza Grande"></div>
+          <div class="field"><label id="lbl-extra">Luogo di partenza</label><input id="f-extra" placeholder="es. Piazza Grande" autocomplete="off"></div>
           <div class="field"><label>Ritmo / difficoltà</label>
             <select id="f-ritmo">
               <option value="">— non specificato —</option>
@@ -602,17 +604,19 @@ function relTime(iso){
 
 // ================= USCITE =================
 async function renderUscite(){
-  const {data}=await sb.from('uscite').select('*').order('data_uscita',{ascending:false});
+  const {data,error}=await sb.from('uscite').select('*').order('data_uscita',{ascending:false});
+  if(error){ $('content-area').innerHTML=noticeError('uscite',error); return; }
   cacheUscite=data||[];
   const futuri=cacheUscite.filter(u=>isFuture(u.data_uscita)), passati=cacheUscite.filter(u=>!isFuture(u.data_uscita));
   $('content-area').innerHTML=`
     <div class="page-head">
-      <div><h1 class="page-title">🗺️ Uscite settimanali</h1><p class="page-sub">${futuri.length} in programma · ${passati.length} archiviate</p></div>
+      <div><h1 class="page-title">🗺️ Uscite settimanali</h1><p class="page-sub">${futuri.length} in programma · ${passati.length} archiviate${isAdmin?' · ✏️ modalità admin: puoi aggiungere, modificare ed eliminare':''}</p></div>
       <div style="display:flex;gap:8px">
         <button class="chip-toggle on" id="flt-futuro" onclick="togglePast(this)">Prossime</button>
         <button class="btn btn-primary admin-only" onclick="openEventModal('uscita')">➕ Nuova uscita</button>
       </div>
     </div>
+    ${isAdmin?adminHintHTML('uscita'):''}
     <div id="list-uscite" class="grid">${futuri.length?futuri.map(u=>uscitaCard(u)).join(''):emptyBox('🚴‍♂️💨','Nessuna uscita in programma','Controlla tra pochi giorni o guarda quelle passate cliccando "Prossime".')}</div>
     <div id="past-uscite" style="display:none">
       <div class="section-title">🗄️ Archivio uscite</div>
@@ -643,6 +647,18 @@ function actionsHTML(type,id){
     <button class="btn btn-sky btn-xs" onclick="editItem('${type}',${id})">✏️ Modifica</button>
     <button class="btn btn-danger btn-xs" onclick="deleteItem('${type}',${id})">🗑️ Elimina</button></div>`;
 }
+function adminHintHTML(type){
+  return `<div class="notice n-info admin-only-block">🛡️ <b>Modalità amministratore attiva:</b> per ogni ${type==='uscita'?'uscita':'gara'} trovi i pulsanti <b>✏️ Modifica</b> e <b>🗑️ Elimina</b>, e in alto il pulsante <b>➕ Nuova ${type}</b>. Puoi gestire tutto anche dal tab 🛡️ Admin.</div>`;
+}
+function noticeError(t,error){
+  const m=(error.message||'').toLowerCase();
+  let help='';
+  if(m.includes('relation')||m.includes('does not exist')||error.code==='42P01'||error.code==='PGRST205')
+    help='<br>👉 Esegui <b>setup.sql</b> nella dashboard Supabase → SQL Editor, poi ricarica la pagina.';
+  else if(error.code==='PGRST301'||m.includes('jwt')||m.includes('permission denied'))
+    help='<br>👉 Policy RLS non ancora aggiornate: riesegui <b>setup.sql</b> in Supabase → SQL Editor (le policy admin sono incluse).';
+  return `<div class="notice n-warn">⚠️ Errore database (tabella <b>${t}</b>): ${escHTML(error.message||'sconosciuto')}${help}</div>`;
+}
 function initMap(elId,gpxUrl){
   setTimeout(()=>{
     const el=document.getElementById(elId); if(!el) return;
@@ -654,14 +670,16 @@ function initMap(elId,gpxUrl){
 
 // ================= GARE =================
 async function renderGare(){
-  const {data}=await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara',{ascending:false});
+  const {data,error}=await sb.from('gare').select('*, iscrizioni(user_id, profiles(nome))').order('data_gara',{ascending:false});
+  if(error){ $('content-area').innerHTML=noticeError('gare',error); return; }
   cacheGare=data||[];
   const futuri=cacheGare.filter(g=>isFuture(g.data_gara)), passati=cacheGare.filter(g=>!isFuture(g.data_gara));
   $('content-area').innerHTML=`
     <div class="page-head">
-      <div><h1 class="page-title">🏁 Gare</h1><p class="page-sub">Iscriviti con un click: l'iscrizione è gratuita e reversibile fino a 24h prima.</p></div>
+      <div><h1 class="page-title">🏁 Gare</h1><p class="page-sub">Iscriviti con un click: l'iscrizione è gratuita e reversibile fino a 24h prima.${isAdmin?' · ✏️ modalità admin attiva':''}</p></div>
       <button class="btn btn-violet admin-only" onclick="openEventModal('gara')">➕ Nuova gara</button>
     </div>
+    ${isAdmin?adminHintHTML('gara'):''}
     <div class="grid">${futuri.length?futuri.map(g=>garaCard(g)).join(''):emptyBox('🏁😴','Nessuna gara imminente','Stiamo preparando il calendario agonistico. Intanto allenati! 💪')}</div>
     ${passati.length?`<div class="section-title">🗄️ Gare svolte</div><div class="grid">${passati.map(g=>garaCard(g)).join('')}</div>`:''}`;
 }
@@ -805,23 +823,35 @@ async function renderGruppo(){
 
 // ================= AREA ADMIN =================
 async function renderAdmin(){
-  const [{data:uscite},{data:gare},{data:prof},{data:messaggi}] = await Promise.all([
+  const [rUscite,rGare,rProf,rMessaggi] = await Promise.all([
     sb.from('uscite').select('*').order('data_uscita',{ascending:false}),
     sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara',{ascending:false}),
     sb.from('profiles').select('id,nome,is_admin'),
     sb.from('messaggi').select('id,testo,created_at,user_id,autore:profiles(nome)').order('created_at',{ascending:false}).limit(20)
   ]);
+  if(rUscite.error||rGare.error){
+    $('content-area').innerHTML=`<div class="page-head"><div><h1 class="page-title">🛡️ Pannello di controllo</h1></div></div>`+
+      (rUscite.error?noticeError('uscite',rUscite.error):'')+(rGare.error?noticeError('gare',rGare.error):'')+
+      `<div class="card" style="margin-top:14px"><p style="font-size:13.5px;color:#475569">💡 <b>Checklist rapida:</b><br>
+      1. Hai eseguito l'ultimo <b>setup.sql</b> in Supabase → SQL Editor? (contiene le policy "admin write uscite/gare")<br>
+      2. Il tuo profilo ha <b>is_admin = true</b>? (pannello Admin → Ruoli, oppure via SQL)<br>
+      3. Sei loggato con l'account admin?</p></div>`;
+    return;
+  }
+  const uscite=rUscite.data, gare=rGare.data, prof=rProf.data, messaggi=rMessaggi.data;
   cacheUscite=uscite||[]; cacheGare=gare||[]; cacheProfili=prof||[];
   const adminCount=(prof||[]).filter(p=>p.is_admin).length;
   const prossimi=[...(uscite||[]).map(u=>({t:'uscita',titolo:u.titolo,data:u.data_uscita})),...(gare||[]).map(g=>({t:'gara',titolo:g.titolo,data:g.data_gara}))].filter(e=>isFuture(e.data)).sort((a,b)=>a.data.localeCompare(b.data));
   $('content-area').innerHTML=`
     <div class="page-head">
       <div><h1 class="page-title">🛡️ Pannello di controllo</h1><p class="page-sub">Accesso riservato agli amministratori · protetto da RLS lato database 🔒</p></div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="openEventModal('uscita')">➕ Uscita</button>
         <button class="btn btn-violet" onclick="openEventModal('gara')">➕ Gara</button>
+        <button class="btn btn-light" onclick="testWritePerm()">🔎 Verifica permessi</button>
       </div>
     </div>
+    ${profileMissing?'<div class="notice n-warn">⚠️ Il tuo profilo non è ancora stato creato nel database: riesegui setup.sql in Supabase (contiene la policy "admin manage profiles"), poi ricarica.</div>':''}
     <div class="stat-grid">
       ${statCard('🚴','#ccfbf1',(uscite||[]).length,'Uscite totali')}
       ${statCard('🏁','#ede9fe',(gare||[]).length,'Gare totali')}
@@ -903,6 +933,29 @@ async function deleteItem(type,id){
   else{ toast('Evento eliminato 👋'); loadData(currentTab); }
 }
 
+// --- Debug admin: verifica permessi di scrittura (RLS) ---
+async function testWritePerm(){
+  if(!isAdmin){ toast('Funzione disponibile solo per gli amministratori 🛡️',true); return; }
+  toast('Verifica permessi in corso…');
+  const out=[];
+  for(const t of ['uscite','gare']){
+    const ins=await sb.from(t).insert({titolo:'__test_permesso__', [t==='uscite'?'data_uscita':'data_gara']:'2099-01-01'});
+    if(ins.error){ out.push(`❌ ${t}: INSERT negato (${ins.error.message})`);
+      if(ins.error.code==='42501'||(ins.error.message||'').toLowerCase().includes('row-level security'))
+        out.push(`   ↳ Esegui <b>setup.sql</b> in Supabase → SQL Editor: contiene la policy "admin write ${t}".`);
+    }
+    else{ await sb.from(t).delete().eq('titolo','__test_permesso__'); out.push(`✅ ${t}: inserimento + cancellazione funzionano`); }
+  }
+  const upd=await sb.from('profiles').update({bike_tag:myProfile?.bike_tag||null}).eq('id',currentUser.id);
+  out.push(upd.error?`⚠️ profiles update: ${upd.error.message}`:'✅ profiles: aggiornamento ok');
+  let box=$('perm-result');
+  if(!box){ box=document.createElement('div'); box.id='perm-result'; box.className='notice n-info'; box.style.marginTop='14px';
+    const grid=$('content-area').querySelector('.stat-grid');
+    (grid||$('content-area')).insertAdjacentElement(grid?'afterend':'afterbegin',box); }
+  box.innerHTML='<b>🔎 Esito verifica permessi:</b><br>'+out.join('<br>');
+  toast(out.some(o=>o.startsWith('❌'))?'Alcune scritture bloccate: vedi il dettaglio nel pannello ⬇️':'Tutti i permessi OK 🎉', out.some(o=>o.startsWith('❌')));
+}
+
 // --- GPX parsing ---
 function haversine(a,b,c,d){ const R=6371000,r=x=>x*Math.PI/180,dLa=r(c-a),dLo=r(d-b);
   const x=Math.sin(dLa/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
@@ -931,6 +984,8 @@ $('f-gpx').addEventListener('change',async e=>{
 
 $('event-form').addEventListener('submit',async e=>{
   e.preventDefault();
+  if(!currentUser){ toast('Accedi prima di salvare un evento 🙂',true); openAuthModal('login'); return; }
+  if(!isAdmin){ toast('Solo gli amministratori possono inserire o modificare uscite e gare 🛡️',true); return; }
   const type=$('form-type').value, editId=$('form-id').value;
   const payloadBase={ titolo:$('f-titolo').value.trim(), ora_ritrovo:$('f-ora').value||null, ritmo:$('f-ritmo').value||null,
     distanza_km:parseFloat($('f-distanza').value)||null, dislivello_m:parseInt($('f-dislivello').value,10)||null, descrizione:$('f-desc').value.trim()||null };
@@ -976,4 +1031,3 @@ checkUser(); checkSchema();
 </script>
 </body>
 </html>
-
