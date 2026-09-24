@@ -11,7 +11,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
 <style>
 :root{
   --bg:#f5f7fb; --surface:#ffffff; --ink:#0e1a2b; --muted:#5b6b80; --line:#e3e9f2;
@@ -269,6 +268,8 @@ body.is-admin .admin-only-block{display:block}
           <label>Traccia GPX</label>
           <input id="f-gpx" type="file" accept=".gpx" style="padding:8px;border-style:dashed">
           <p class="hint" id="gpx-stats" style="display:none;color:var(--brand-dark);font-weight:700"></p>
+          <p class="hint" style="margin-top:6px">💡 Se il caricamento fallisce: apri il .gpx col Blocco note → Ctrl+A → Ctrl+C, poi premi il pulsante qui sotto (le metriche vengono calcolate comunque; la mappa serve solo se alleghi il file).</p>
+          <button type="button" id="btn-gpx-paste" class="btn btn-light" style="margin-top:6px;width:100%">📋 Estrai km e D+ dagli appunti (GPX copiato)</button>
         </div>
         <div id="ev-error"></div>
         <div style="display:flex;gap:10px;margin-top:6px">
@@ -382,14 +383,23 @@ async function checkRole(){
   else if(!data){
     profileMissing=true;
     // IL PRIMO UTENTE REGISTRATO DIVENTA AUTOMATICAMENTE AMMINISTRATORE 👑
-    let primoUtente=false;
+    // (usiamo become_admin() lato DB: evita letture/ricorsioni sulle policy)
+    let insErr=null;
     try{
-      const {count} = await sb.from('profiles').select('id',{count:'exact',head:true});
-      primoUtente=!count;
-    }catch(e){ /* se non possiamo contare, procediamo come membro */ }
-    const {error:insErr}=await sb.from('profiles').insert({id:currentUser.id,nome:currentUser.user_metadata?.nome||'Atleta',is_admin:primoUtente});
-    if(insErr) toast('Profilo non ancora creato: contatta un admin.',true);
-    else{ profileMissing=false; toast(primoUtente?'Sei il/la fondatore/trice del portale: sei amministratore/a! 👑':'Profilo creato! Ora sei dei nostri 🚴'); }
+      const {data:bd, error:bErr}=await sb.rpc('become_admin');
+      if(bErr) throw bErr;
+      const msg=String(bd||'');
+      if(msg.startsWith('ERRORE')){
+        // non siamo il primo utente: creiamo il profilo come membro normale
+        const r2=await sb.from('profiles').insert({id:currentUser.id,nome:currentUser.user_metadata?.nome||'Atleta',is_admin:false});
+        insErr=r2.error;
+      } else {
+        profileMissing=false;
+        toast('Sei il/la fondatore/trice del portale: sei amministratore/a! 👑');
+      }
+    }catch(e){ insErr=e; }
+    if(insErr) toast('Profilo non ancora creato: apri il pannello Admin → "Verifica permessi".',true);
+    else if(!profileMissing&&!insErr) toast('Profilo creato! Ora sei dei nostri 🚴');
   }else{ myProfile=data; }
   if(profileMissing){ const {data:f}=await sb.from('profiles').select('*').eq('id',currentUser.id).maybeSingle(); if(f) myProfile=f; }
   isAdmin=myProfile?.is_admin||false;
@@ -667,6 +677,8 @@ function noticeError(t,error){
     help='<br>👉 Esegui <b>setup.sql</b> nella dashboard Supabase → SQL Editor, poi ricarica la pagina.';
   else if(error.code==='PGRST301'||m.includes('jwt')||m.includes('permission denied'))
     help='<br>👉 Policy RLS non ancora aggiornate: riesegui <b>setup.sql</b> in Supabase → SQL Editor (le policy admin sono incluse).';
+  else if(m.includes('recursion'))
+    help='<br>👉 Le vecchie policy causano ricorsione: apri Supabase → SQL Editor ed esegui il blocco <b>"FIX RAPIDO RICORSIONE"</b> in cima a setup.sql, poi ricarica la pagina.';
   return `<div class="notice n-warn">⚠️ Errore database (tabella <b>${t}</b>): ${escHTML(error.message||'sconosciuto')}${help}</div>`;
 }
 function initMap(elId,gpxUrl){
@@ -674,7 +686,20 @@ function initMap(elId,gpxUrl){
     const el=document.getElementById(elId); if(!el) return;
     const map=L.map(elId).setView([45.5,9.2],10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map);
-    new L.GPX(gpxUrl,{async:true,color:'#0d9488',weight:4}).on('loaded',e=>map.fitBounds(e.target.getBounds())).addTo(map);
+    const fail=(msg)=>{ el.innerHTML=`<div class="map-placeholder">⚠️ ${escHTML(msg)}<br><a href="${escHTML(gpxUrl)}" target="_blank" rel="noopener" style="color:var(--brand-dark);font-weight:700">📥 Scarica il GPX</a></div>`; };
+    // scarichiamo il GPX via fetch così possiamo parsarlo noi (più robusto di leaflet-gpx con file Garmin)
+    fetch(gpxUrl,{mode:'cors'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status+' (file non trovato nel bucket? Ricrea il bucket "tracce-gpx" con setup.sql)'); return r.text(); })
+      .then(txt=>{
+        let pts; try{ pts=parseGpxPoints(txt); }catch(e){ return fail('GPX illeggibile: '+e.message); }
+        const line=L.polyline(pts.map(p=>[p.lat,p.lon]),{color:'#0d9488',weight:4,opacity:.9}).addTo(map);
+        const first=pts[0], last=pts[pts.length-1];
+        L.marker([first.lat,first.lon]).addTo(map).bindPopup('🟢 Partenza');
+        L.marker([last.lat,last.lon]).addTo(map).bindPopup('🏁 Arrivo');
+        const st=calcGpxStats(pts);
+        line.bindTooltip(`📏 ${(st.distanceM/1000).toFixed(1)} km · ⛰️ ${Math.round(st.elevationGainM)} m D+`,{sticky:true});
+        map.fitBounds(line.getBounds().pad(0.12));
+      })
+      .catch(err=>fail('Errore lettura GPX: '+(err.message||'CORS/network')));
   },80);
 }
 
@@ -836,7 +861,7 @@ async function renderAdmin(){
   const [rUscite,rGare,rProf,rMessaggi] = await Promise.all([
     sb.from('uscite').select('*').order('data_uscita',{ascending:false}),
     sb.from('gare').select('*, iscrizioni(user_id)').order('data_gara',{ascending:false}),
-    sb.from('profiles').select('id,nome,is_admin'),
+    sb.rpc('list_profiles_admin'),
     sb.from('messaggi').select('id,testo,created_at,user_id,autore:profiles(nome)').order('created_at',{ascending:false}).limit(20)
   ]);
   if(rUscite.error||rGare.error){
@@ -861,7 +886,7 @@ async function renderAdmin(){
         <button class="btn btn-light" onclick="testWritePerm()">🔎 Verifica permessi</button>
       </div>
     </div>
-    ${profileMissing?'<div class="notice n-warn">⚠️ Il tuo profilo non è ancora stato creato nel database: riesegui setup.sql in Supabase (contiene la policy "admin manage profiles"), poi ricarica.</div>':''}
+    ${profileMissing?'<div class="notice n-warn">⚠️ Il tuo profilo non è ancora stato creato nel database: apri il pannello Admin → "Verifica permessi", oppure riesegui setup.sql in Supabase → SQL Editor, poi ricarica.</div>':''}
     <div class="stat-grid">
       ${statCard('🚴','#ccfbf1',(uscite||[]).length,'Uscite totali')}
       ${statCard('🏁','#ede9fe',(gare||[]).length,'Gare totali')}
@@ -904,8 +929,9 @@ async function renderAdmin(){
 }
 async function toggleAdmin(pid,val){
   if(pid===currentUser.id&&!val){ toast('Non puoi rimuovere te stesso/a 😉',true); return; }
-  const {error}=await sb.from('profiles').update({is_admin:val}).eq('id',pid);
+  const {data,error}=await sb.rpc('set_admin',{p_target:pid,p_value:val});
   if(error) toast('Ruolo non aggiornato: '+error.message,true);
+  else if(String(data||'').startsWith('ERRORE')) toast(String(data),true);
   else{ toast(val?'Nuovo admin nominato! 👑':'Ruolo admin revocato.'); renderAdmin(); }
 }
 async function deleteMsgAdmin(id){
@@ -958,6 +984,22 @@ async function testWritePerm(){
   }
   const upd=await sb.from('profiles').update({bike_tag:myProfile?.bike_tag||null}).eq('id',currentUser.id);
   out.push(upd.error?`⚠️ profiles update: ${upd.error.message}`:'✅ profiles: aggiornamento ok');
+  // Verifica stato admin del profilo corrente (con fix automatico se possibile)
+  const chk=await sb.from('profiles').select('is_admin').eq('id',currentUser.id).maybeSingle();
+  if(chk.error){ out.push(`❌ lettura profiles: ${chk.error.message} — riesegui setup.sql in Supabase → SQL Editor.`); }
+  else if(!chk.data){ out.push('⚠️ Il tuo profilo non esiste ancora in profiles: ricarica la pagina per crearlo.'); }
+  else if(!chk.data.is_admin){
+    out.push('⚠️ Il tuo profilo <b>non è amministratore</b>. Provo a correggere…');
+    const fr=await sb.rpc('become_admin');
+    const fix={error:fr.error?(fr.error.message||''):(String(fr.data||'').startsWith('ERRORE')?String(fr.data):null)};
+    if(fix.error){
+      out.push(`   ↳ Correzione bloccata dalle policy. Soluzione rapida: apri <b>Supabase → Table Editor → profiles</b>, trova la tua riga e spunta <b>is_admin = true</b>, poi ricarica questa pagina.`);
+      out.push(`   ↳ In alternativa: Supabase → SQL Editor → esegui <code>select public.become_admin('${currentUser.email||'tua@email.it'}');</code>`);
+    } else {
+      out.push('   ✅ Ruolo admin assegnato! Ricarica la pagina (F5) e vedrai il pannello 🛡️ Admin.');
+    }
+  }
+  else{ out.push('✅ Profilo attivo con ruolo Amministratore 👑'); }
   let box=$('perm-result');
   if(!box){ box=document.createElement('div'); box.id='perm-result'; box.className='notice n-info'; box.style.marginTop='14px';
     const grid=$('content-area').querySelector('.stat-grid');
@@ -966,30 +1008,66 @@ async function testWritePerm(){
   toast(out.some(o=>o.startsWith('❌'))?'Alcune scritture bloccate: vedi il dettaglio nel pannello ⬇️':'Tutti i permessi OK 🎉', out.some(o=>o.startsWith('❌')));
 }
 
-// --- GPX parsing ---
+// --- GPX parsing (v2: parser regex robusto, senza DOM API → zero rischi di ricorsione/namespace) ---
 function haversine(a,b,c,d){ const R=6371000,r=x=>x*Math.PI/180,dLa=r(c-a),dLo=r(d-b);
   const x=Math.sin(dLa/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
 function parseGpxPoints(text){
-  const doc=new DOMParser().parseFromString(text,'application/xml');
-  if(doc.querySelector('parsererror')) throw new Error('File GPX non valido.');
-  const pts=[]; doc.getElementsByTagName('*').forEach(n=>{ const t=n.tagName.toLowerCase();
-    if(t==='trkpt'||t==='rtept'||t==='wpt'){ const lat=parseFloat(n.getAttribute('lat')),lon=parseFloat(n.getAttribute('lon'));
-      if(!isNaN(lat)&&!isNaN(lon)){ let ele=null; for(const c of n.children) if(c.tagName.toLowerCase()==='ele'){const v=parseFloat(c.textContent); if(!isNaN(v))ele=v;}
-        pts.push({lat,lon,ele}); }}});
-  if(pts.length<2) throw new Error('Il GPX non contiene abbastanza punti.');
+  if(typeof text!=='string'||!text.trim()) throw new Error('Il file è vuoto o non leggibile come testo.');
+  const low=text.slice(0,3000).toLowerCase();
+  if(low.includes('<html')||low.includes('<!doctype html')) throw new Error('Sembra una pagina HTML, non un GPX (hai salvato la pagina web invece del file? In Garmin Connect usa "Esporta dati" → GPX).');
+  // Estrae ogni blocco trkpt/rtept/wpt ... /... anche se il tag ha attributi extra o namespace (gpxns:trkpt)
+  const re=/<(?:[A-Za-z0-9_.-]+:)?(trkpt|rtept|wpt)\b[^>]*>([\s\S]*?)<\/(?:[A-Za-z0-9_.-]+:)?\1\s*>|<(?:[A-Za-z0-9_.-]+:)?(trkpt|rtept|wpt)\b[^>]*\/>/gi;
+  const pts=[]; let m;
+  while((m=re.exec(text))!==null){
+    const attrs=m[0]; const inner=m[2]||'';
+    const la=/\blat\s*=\s*["']\s*(-?\d+(?:\.\d+)?)\s*["']/i.exec(attrs);
+    const lo=/\blon\s*=\s*["']\s*(-?\d+(?:\.\d+)?)\s*["']/i.exec(attrs);
+    if(!la||!lo) continue;
+    const lat=parseFloat(la[1]), lon=parseFloat(lo[1]);
+    if(isNaN(lat)||isNaN(lon)||Math.abs(lat)>90||Math.abs(lon)>180) continue;
+    const el=/<(?:[A-Za-z0-9_.-]+:)?ele\s*>\s*(-?\d+(?:\.\d+)?)\s*</i.exec(inner); // quota diretta o dentro extensions Garmin
+    pts.push({lat, lon, ele:el?parseFloat(el[1]):null});
+  }
+  if(pts.length<2){
+    // fallback: DOMParser (browser moderni restituiscono NodeList con forEach)
+    try{
+      const doc=new DOMParser().parseFromString(text,'application/xml');
+      if(!doc.querySelector('parsererror')){
+        doc.querySelectorAll('trkpt,rtept,wpt').forEach(n=>{
+          const lat=parseFloat(n.getAttribute('lat')), lon=parseFloat(n.getAttribute('lon'));
+          if(isNaN(lat)||isNaN(lon)) return;
+          const e=n.querySelector('ele')||n.getElementsByTagName('*')[0]&&Array.from(n.querySelectorAll('*')).find(x=>x.localName==='ele');
+          pts.push({lat,lon,ele:e?parseFloat(e.textContent):null});
+        });
+      }
+    }catch(_){}
+  }
+  if(pts.length<2) throw new Error('Il GPX non contiene traccia con punti validi (trkpt/rtept). Esporta da Garmin come "GPX" (non TCX/FIT) e riprova. Se il file va bene, svuota la cache (Ctrl+Shift+R): il portale potrebbe essere una versione vecchia.');
   return pts;
 }
 function calcGpxStats(pts){ let dist=0,gain=0;
   for(let i=1;i<pts.length;i++){ dist+=haversine(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon);
     const p=pts[i-1].ele,c=pts[i].ele; if(p!=null&&c!=null&&c-p>0.5) gain+=c-p; }
   return {distanceM:dist,elevationGainM:gain}; }
-$('f-gpx').addEventListener('change',async e=>{
-  const file=e.target.files[0]; $('gpx-stats').style.display='none'; if(!file) return;
-  try{ const pts=parseGpxPoints(await file.text()); const st=calcGpxStats(pts);
+async function applyGpxText(txt,label){
+  try{ const pts=parseGpxPoints(txt); const st=calcGpxStats(pts);
     $('f-distanza').value=(st.distanceM/1000).toFixed(1);
     const hasEle=pts.some(p=>p.ele!=null); if(hasEle) $('f-dislivello').value=Math.round(st.elevationGainM);
-    const el=$('gpx-stats'); el.textContent=`🤖 GPX letto: 📏 ${(st.distanceM/1000).toFixed(1)} km${hasEle?' · ⛰️ '+Math.round(st.elevationGainM)+' m D+':''}`; el.style.display='block';
+    const el=$('gpx-stats'); el.textContent=`🤖 ${label}: 📏 ${(st.distanceM/1000).toFixed(1)} km${hasEle?' · ⛰️ '+Math.round(st.elevationGainM)+' m D+':''}`; el.style.display='block';
+    toast(`Metriche estratte dal ${label.toLowerCase()} ✅ compila il resto e salva`);
   }catch(err){ toast('GPX illeggibile: '+err.message,true); }
+}
+$('f-gpx').addEventListener('change',async e=>{
+  const file=e.target.files[0]; $('gpx-stats').style.display='none'; if(!file) return;
+  applyGpxText(await file.text(),'file caricato');
+});
+document.addEventListener('click',async e=>{
+  if(e.target.id!=='btn-gpx-paste') return;
+  try{
+    const txt=await navigator.clipboard.readText();
+    if(!txt||txt.length<50){ toast('Gli appunti sono vuoti: prima copia il contenuto del .gpx (apri il file col Blocco note → Ctrl+A → Ctrl+C)',true); return; }
+    await applyGpxText(txt,'GPX dagli appunti');
+  }catch(err){ toast('Incolla non permesso dal browser: usa il campo qui sotto, oppure apri il .gpx col Blocco note, copia tutto e incolla nel campo "Testo GPX".',true); }
 });
 
 $('event-form').addEventListener('submit',async e=>{
